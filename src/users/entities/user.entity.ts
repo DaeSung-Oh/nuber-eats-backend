@@ -32,7 +32,7 @@ export class User extends CoreEntity {
   password: string;
 
   @Column({ type: 'enum', enum: UserRole })
-  @Field(type => String)
+  @Field(type => UserRole)
   @IsEnum(UserRole)
   role: UserRole;
 

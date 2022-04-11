@@ -14,6 +14,9 @@ import { User } from './users/entities/user.entity';
 import { CommonModule } from './common/common.module';
 import { JwtModule } from './jwt/jwt.module';
 import { JwtMiddleware } from './jwt/jwt.middleware';
+import { AuthModule } from './auth/auth.module';
+import { Verification } from './users/entities/verification.entity';
+import { MailModule } from './mail/mail.module';
 
 @Module({
   imports: [
@@ -29,6 +32,11 @@ import { JwtMiddleware } from './jwt/jwt.middleware';
         DB_PASSWORD: Joi.string().required(),
         DB_NAME: Joi.string().required(),
         TOKEN_SECRET_KEY: Joi.string().required(),
+        GMAIL_API_KEY: Joi.string().required(),
+        GMAIL_OAUTH_USER: Joi.string().required(),
+        GMAIL_CLIENT_ID: Joi.string().required(),
+        GMAIL_CLIENT_SECRET_KEY: Joi.string().required(),
+        GMAIL_OAUTH_REFRESH_TOKEN: Joi.string().required(),
       }),
     }),
     TypeOrmModule.forRoot({
@@ -40,7 +48,7 @@ import { JwtMiddleware } from './jwt/jwt.middleware';
       database: process.env.DB_NAME,
       synchronize: process.env.NODE_ENV !== 'prod',
       logging: true,
-      entities: [User],
+      entities: [User, Verification],
     }),
     GraphQLModule.forRoot({
       driver: ApolloDriver,
@@ -50,8 +58,16 @@ import { JwtMiddleware } from './jwt/jwt.middleware';
     JwtModule.forRoot({
       privateKey: process.env.TOKEN_SECRET_KEY,
     }),
+    MailModule.forRoot({
+      apiKey: process.env.GMAIL_API_KEY,
+      oauthUser: process.env.GMAIL_OAUTH_USER,
+      refreshToken: process.env.GMAIL_OAUTH_REFRESH_TOKEN,
+      gmailClientID: process.env.GMAIL_CLIENT_ID,
+      gmailSecretKey: process.env.GMAIL_CLIENT_SECRET_KEY,
+    }),
     UsersModule,
     CommonModule,
+    AuthModule,
   ],
   controllers: [],
   providers: [],
@@ -60,7 +76,7 @@ export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
     consumer.apply(JwtMiddleware).forRoutes({
       path: '/graphql',
-      method: RequestMethod.ALL,
+      method: RequestMethod.POST,
     });
   }
 }

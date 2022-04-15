@@ -5,3 +5,5 @@ export interface MailModuleOptions {
   gmailClientID: string;
   gmailSecretKey: string;
 }
+
+export type EmailTemplate = 'verifyEmail' | 'welcome';

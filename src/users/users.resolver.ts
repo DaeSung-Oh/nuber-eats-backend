@@ -1,15 +1,8 @@
 import { UseGuards } from '@nestjs/common';
-import {
-  Resolver,
-  Query,
-  Args,
-  Mutation,
-  Field,
-  ObjectType,
-} from '@nestjs/graphql';
-import { boolean } from 'joi';
+import { Resolver, Query, Args, Mutation } from '@nestjs/graphql';
 import { AuthUser } from 'src/auth/auth-user.decorator';
 import { AuthGuard } from 'src/auth/auth.guard';
+import { SendEmailInput } from 'src/mail/dtos/send-email.dto';
 import { MailService } from 'src/mail/mail.service';
 import {
   CreateAccountInput,
@@ -40,17 +33,8 @@ export class UserResolver {
   async userProfile(
     @Args() userProfileInput: UserProfileInput,
   ): Promise<UserProfileOutput> {
-    try {
-      const { userId } = userProfileInput;
-      const user = await this.usersService.findById(userId);
-      if (!user) throw Error();
-      return { ok: true, user };
-    } catch (e) {
-      return {
-        ok: false,
-        error: 'User Not Found',
-      };
-    }
+    const { userId } = userProfileInput;
+    return await this.usersService.findById(userId);
   }
 
   @UseGuards(AuthGuard)
@@ -59,70 +43,35 @@ export class UserResolver {
     @AuthUser() authUser: User,
     @Args('input') editProfileInput: EditProfileInput,
   ): Promise<EditProfileOutput> {
-    try {
-      await this.usersService.editProfile(authUser.id, editProfileInput);
-      return {
-        ok: true,
-      };
-    } catch (error) {
-      return {
-        ok: false,
-        error,
-      };
-    }
+    return await this.usersService.editProfile(authUser.id, editProfileInput);
   }
 
   @Mutation(returns => CreateAccountOutput)
   async createAccount(
     @Args('input') createAccoutInput: CreateAccountInput,
   ): Promise<CreateAccountOutput> {
-    try {
-      return this.usersService.createAccount(createAccoutInput);
-    } catch (error) {
-      return {
-        ok: false,
-        error,
-      };
-    }
+    return this.usersService.createAccount(createAccoutInput);
   }
 
   @Mutation(returns => LoginOutput)
   async login(@Args('input') loginInput: LoginInput): Promise<LoginOutput> {
-    try {
-      return await this.usersService.login(loginInput);
-    } catch (error) {
-      return {
-        ok: false,
-        error,
-      };
-    }
+    return await this.usersService.login(loginInput);
   }
 
   @Mutation(returns => VerifyEmailOutput)
   async verifyEmail(
     @Args('input') { code }: VerifyEmailInput,
   ): Promise<VerifyEmailOutput> {
-    try {
-      const isVerify = await this.usersService.verifyEmail(code);
-      if (!isVerify) {
-        return {
-          ok: false,
-          error: 'not Verify',
-        };
-      }
-      return {
-        ok: true,
-      };
-    } catch (error) {
-      return {
-        ok: false,
-        error,
-      };
-    }
+    return await this.usersService.verifyEmail(code);
   }
 
   @Mutation(returns => VerifyEmailOutput)
-  sendEmail(@Args('input') to: string) {
-    return this.mailService.sendEmail(to);
+  sendEmail(@Args('input') { to, templateName }: SendEmailInput) {
+    return this.mailService.sendEmail(to, templateName);
+  }
+
+  @Mutation(returns => VerifyEmailOutput)
+  sendGmail(@Args('input') { to, templateName }: SendEmailInput) {
+    return this.mailService.sendByGmail(to, templateName);
   }
 }

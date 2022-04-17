@@ -60,7 +60,7 @@ import { MailModule } from './mail/mail.module';
     }),
     MailModule.forRoot({
       apiKey: process.env.GMAIL_API_KEY,
-      oauthUser: process.env.GMAIL_OAUTH_USER,
+      oAuthUser: process.env.GMAIL_OAUTH_USER,
       refreshToken: process.env.GMAIL_OAUTH_REFRESH_TOKEN,
       gmailClientID: process.env.GMAIL_CLIENT_ID,
       gmailSecretKey: process.env.GMAIL_CLIENT_SECRET_KEY,

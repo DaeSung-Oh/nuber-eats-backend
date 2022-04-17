@@ -2,7 +2,11 @@ import { UseGuards } from '@nestjs/common';
 import { Resolver, Query, Args, Mutation } from '@nestjs/graphql';
 import { AuthUser } from 'src/auth/auth-user.decorator';
 import { AuthGuard } from 'src/auth/auth.guard';
-import { SendEmailInput } from 'src/mail/dtos/send-email.dto';
+import {
+  SendEmailInput,
+  SendEmailOutput,
+  SendVerificationEmailInput,
+} from 'src/mail/dtos/send-email.dto';
 import { MailService } from 'src/mail/mail.service';
 import {
   CreateAccountInput,
@@ -50,7 +54,7 @@ export class UserResolver {
   async createAccount(
     @Args('input') createAccoutInput: CreateAccountInput,
   ): Promise<CreateAccountOutput> {
-    return this.usersService.createAccount(createAccoutInput);
+    return await this.usersService.createAccount(createAccoutInput);
   }
 
   @Mutation(returns => LoginOutput)
@@ -65,12 +69,19 @@ export class UserResolver {
     return await this.usersService.verifyEmail(code);
   }
 
-  @Mutation(returns => VerifyEmailOutput)
-  sendEmail(@Args('input') { to, templateName }: SendEmailInput) {
-    return this.mailService.sendEmail(to, templateName);
+  @Mutation(returns => SendEmailOutput)
+  sendEmail(@Args('input') { to, templateName, emailVars }: SendEmailInput) {
+    return this.mailService.sendEmail(to, templateName, emailVars);
   }
 
-  @Mutation(returns => VerifyEmailOutput)
+  @Mutation(returns => SendEmailOutput)
+  sendVerficationEmail(
+    @Args('input') { email, code }: SendVerificationEmailInput,
+  ): Promise<SendEmailOutput> {
+    return this.mailService.sendVerificationEmail(email, code);
+  }
+
+  @Mutation(returns => SendEmailOutput)
   sendGmail(@Args('input') { to, templateName }: SendEmailInput) {
     return this.mailService.sendByGmail(to, templateName);
   }

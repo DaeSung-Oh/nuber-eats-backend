@@ -42,11 +42,12 @@ export class UserService {
       const user = await this.users.save(
         this.users.create({ email, password, role }),
       );
-      await this.verifications.save(
+      const verification = await this.verifications.save(
         this.verifications.create({
           user,
         }),
       );
+      this.mailService.sendVerificationEmail(user.email, verification.code);
       return { ok: true };
     } catch (e) {
       return { ok: false, error: 'Couldn`t create account' };
@@ -91,9 +92,14 @@ export class UserService {
     editProfileInput: EditProfileInput,
   ): Promise<EditProfileOutput> {
     try {
+      const { email, password } = editProfileInput;
+
       const user = await this.users.findOne({ id: userId });
-      if (editProfileInput.email) {
-        await this.verifications.save(this.verifications.create({ user }));
+      if (email) {
+        const verification = await this.verifications.save(
+          this.verifications.create({ user }),
+        );
+        this.mailService.sendVerificationEmail(user.email, verification.code);
       }
       await this.users.save({ ...user, ...editProfileInput });
       return { ok: true };

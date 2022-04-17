@@ -80,10 +80,10 @@ export class UserService {
 
   async findById(id: number): Promise<UserProfileOutput> {
     try {
-      const user = await this.users.findOne({ id });
+      const user = await this.users.findOneOrFail({ id });
       return { ok: true, user };
     } catch (error) {
-      return { ok: false, error };
+      return { ok: false, error: 'User Not Found' };
     }
   }
 
@@ -96,15 +96,20 @@ export class UserService {
 
       const user = await this.users.findOne({ id: userId });
       if (email) {
+        user.email = email;
+        user.emailVerified = false;
         const verification = await this.verifications.save(
           this.verifications.create({ user }),
         );
         this.mailService.sendVerificationEmail(user.email, verification.code);
       }
-      await this.users.save({ ...user, ...editProfileInput });
+      if (password) {
+        user.password = password;
+      }
+      await this.users.save(user);
       return { ok: true };
     } catch (error) {
-      return { ok: false, error };
+      return { ok: false, error: 'Could not update profile' };
     }
   }
 

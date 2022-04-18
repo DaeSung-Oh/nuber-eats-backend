@@ -183,7 +183,7 @@ describe('UserService', () => {
     });
 
     it('should fail on Exception', async () => {
-      usersRepository.findOne.mockResolvedValue(new Error());
+      usersRepository.findOne.mockRejectedValue(new Error());
       const result = await service.login(loginArgs);
       expect(result).toMatchObject({ ok: false, error: expect.any(Error) });
     });
@@ -304,6 +304,78 @@ describe('UserService', () => {
         ok: false,
         error: 'Could not update profile',
       });
+    });
+  });
+
+  describe('verifyEmail', () => {
+    const verifyEmailArgs = {
+      code: 'verificationCode',
+    };
+
+    const mockedUser = {
+      id: 1,
+      email: 'MockUser@gmail.com',
+      emailVerified: false,
+    };
+
+    const mockedVerification = {
+      id: 2,
+      code: verifyEmailArgs.code,
+      user: mockedUser,
+    };
+
+    it('should verify email and delete verification', async () => {
+      verificationsRepository.findOne.mockResolvedValue(mockedVerification);
+
+      const result = await service.verifyEmail(verifyEmailArgs.code);
+
+      expect(verificationsRepository.findOne).toHaveBeenCalledTimes(1);
+      expect(verificationsRepository.findOne).toHaveBeenCalledWith(
+        verifyEmailArgs,
+        { relations: ['user'] },
+      );
+
+      expect(mockedUser.emailVerified).toBe(true);
+
+      expect(usersRepository.save).toHaveBeenCalledTimes(1);
+      expect(usersRepository.save).toHaveBeenCalledWith(
+        mockedVerification.user,
+      );
+
+      expect(verificationsRepository.delete).toHaveBeenCalledTimes(1);
+      expect(verificationsRepository.delete).toHaveBeenCalledWith(
+        mockedVerification.id,
+      );
+
+      expect(result).toMatchObject({ ok: true });
+    });
+
+    it('should fail on verification not found', async () => {
+      verificationsRepository.findOne.mockResolvedValue(undefined);
+
+      const result = await service.verifyEmail(verifyEmailArgs.code);
+
+      expect(verificationsRepository.findOne).toHaveBeenCalledTimes(1);
+      expect(verificationsRepository.findOne).toHaveBeenCalledWith(
+        verifyEmailArgs,
+        { relations: ['user'] },
+      );
+
+      expect(result).toMatchObject({ ok: false });
+    });
+
+    it('should fail on Exception', async () => {
+      verificationsRepository.findOne.mockRejectedValue(new Error());
+
+      const result = await service.verifyEmail(verifyEmailArgs.code);
+
+      expect(verificationsRepository.findOne).toHaveBeenCalledTimes(1);
+      expect(verificationsRepository.findOne).toHaveBeenCalledWith(
+        verifyEmailArgs,
+        { relations: ['user'] },
+      );
+
+      expect(result).toMatchObject({ ok: false, error: expect.any(Error) });
     });
   });
 });

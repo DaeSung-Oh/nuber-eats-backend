@@ -3,19 +3,23 @@ import { CONFIG_OPTIONS } from 'src/common/common.constants';
 import { JwtService } from './jwt.service';
 import * as jwt from 'jsonwebtoken';
 
+const TEST_PRIVATE_KEY = 'private.testing';
+const TEST_PAYLOAD = { sub: 'user', id: 1 };
+
 jest.mock('jsonwebtoken', () => {
   return {
     sign: jest.fn(() => 'TOKEN'),
+    verify: jest.fn(() => TEST_PAYLOAD),
   };
 });
-
-const TEST_PRIVATE_KEY = 'private.testing';
 
 describe('JWT Service', () => {
   let service: JwtService;
   const jwtModuleOptions = {
     privateKey: TEST_PRIVATE_KEY,
   };
+
+  console.log(jwt);
 
   beforeEach(async () => {
     const module = await Test.createTestingModule({
@@ -47,6 +51,22 @@ describe('JWT Service', () => {
       );
 
       expect(token).toBe('TOKEN');
+    });
+
+    it('should return decoded data', () => {
+      const verifyArgs = {
+        token: 'TOKEN',
+      };
+
+      const decoded_data = service.verify(verifyArgs.token);
+
+      expect(jwt.verify).toHaveBeenCalledTimes(1);
+      expect(jwt.verify).toHaveBeenCalledWith(
+        verifyArgs.token,
+        jwtModuleOptions.privateKey,
+      );
+
+      expect(decoded_data).toMatchObject(TEST_PAYLOAD);
     });
   });
 });

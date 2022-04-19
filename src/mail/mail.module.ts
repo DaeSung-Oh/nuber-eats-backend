@@ -22,6 +22,7 @@ export class MailModule {
       options.gmailSecretKey,
       'https://developers.google.com/oauthplayground',
     );
+
     vars.oAuth2Client.setCredentials({
       refresh_token: options.refreshToken,
     });

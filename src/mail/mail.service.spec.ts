@@ -1,85 +1,12 @@
 import { Test } from '@nestjs/testing';
-import { google, gmail_v1 } from 'googleapis';
-import { OAuth2Client } from 'google-auth-library';
+import { google } from 'googleapis';
 import * as mailer from 'nodemailer';
 import { CONFIG_OPTIONS } from 'src/common/common.constants';
 import { VARS } from './mail.constants';
 import { MailService } from './mail.service';
 
-/*
-  protected refreshTokenPromises: Map<string, Promise<GetTokenResponse>>;
-
-  interface GetTokenResponse {
-    tokens: Credentials;
-    res: GaxiosResponse | null;
-  }
-
-  export interface GaxiosResponse<T = any> {
-      config: GaxiosOptions;
-      data: T;
-      status: number;
-      statusText: string;
-      headers: Headers;
-      request: GaxiosXMLHttpRequest;
-  }
-
-  export interface GaxiosXMLHttpRequest {
-    responseURL: string;
-  }
-
-  interface Credentials {
-     refresh_token?: string | null;
-     expiry_date?: number | null;
-     access_token?: string | null;
-     token_type?: string | null;
-     id_token?: string | null;
-     scope?: string;
- }
-*/
-/*
-jest.mock('googleapis', () => {
-  return {
-    google: {
-      auth: {
-        OAuth2: jest.fn(() => ({
-          _clientId: options.gmailClientID,
-          _clientSecret: options.gmailSecretKey,
-          redirectUri: 'https://testing.google.com',
-          refreshTokenPromises: jest.fn(() =>
-            Promise.resolve(
-              new Map().set('test', {
-                tokens: { refresh_token: options.refreshToken },
-                res: null,
-              }),
-            ),
-          ),
-        })),
-      },
-    },
-  };
-});
-*/
-/*
-jest.mock('google-auth-library', () => {
-  return {
-    OAuth2Client: jest.fn().mockImplementation(() => {
-      return {
-        _clientId: options.gmailClientID,
-        _clientSecret: options.gmailSecretKey,
-        redirectUri: 'https://testing.google.com',
-        refreshTokenPromises: jest.fn(() =>
-          Promise.resolve(
-            new Map().set('test', {
-              tokens: { refresh_token: options.refreshToken },
-              res: null,
-            }),
-          ),
-        ),
-      };
-    }),
-  };
-});
-*/
+jest.mock('googleapis');
+jest.mock('nodemailer');
 
 const options = {
   apiKey: 'Gmail.api.Key',
@@ -98,6 +25,32 @@ describe('Mail Service', () => {
       transporter: undefined,
       gmail: undefined,
     };
+
+    vars.oAuth2Client = new google.auth.OAuth2(
+      options.gmailClientID,
+      options.gmailSecretKey,
+      'https://test.redirect.com',
+    );
+    vars.oAuth2Client.setCredentials({ refresh_token: options.refreshToken });
+
+    vars.gmail = google.gmail({
+      version: 'v1',
+      auth: vars.oAuth2Client,
+    });
+
+    vars.transporter = mailer.createTransport({
+      service: 'gmail',
+      host: 'smtp.google.com',
+      port: 587,
+      secure: true,
+      auth: {
+        type: 'OAuth2',
+        user: options.oAuthUser,
+        clientId: options.gmailClientID,
+        clientSecret: options.gmailSecretKey,
+        refreshToken: options.refreshToken,
+      },
+    });
 
     const module = await Test.createTestingModule({
       providers: [

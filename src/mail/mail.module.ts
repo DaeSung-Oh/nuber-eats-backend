@@ -17,15 +17,19 @@ export class MailModule {
       transporter: undefined,
       gmail: undefined,
     };
+
     vars.oAuth2Client = new google.auth.OAuth2(
       options.gmailClientID,
       options.gmailSecretKey,
       'https://developers.google.com/oauthplayground',
     );
-
     vars.oAuth2Client.setCredentials({
       refresh_token: options.refreshToken,
     });
+
+    console.log(vars.oAuth2Client);
+    console.log(vars.oAuth2Client.credentials);
+
     vars.gmail = google.gmail({
       version: 'v1',
       auth: vars.oAuth2Client,

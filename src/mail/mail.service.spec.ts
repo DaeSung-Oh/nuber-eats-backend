@@ -5,9 +5,6 @@ import { CONFIG_OPTIONS } from 'src/common/common.constants';
 import { VARS } from './mail.constants';
 import { MailService } from './mail.service';
 
-jest.mock('googleapis');
-jest.mock('nodemailer');
-
 const options = {
   apiKey: 'Gmail.api.Key',
   oAuthUser: 'Google.oAuthUser',
@@ -16,41 +13,61 @@ const options = {
   gmailSecretKey: 'Gmail.SecretKey',
 };
 
+const vars = {
+  oAuth2Client: undefined,
+  transporter: undefined,
+  gmail: undefined,
+};
+
+jest.mock('googleapis', () => {
+  return {
+    google: {
+      auth: {
+        OAuth2: jest.fn(function (id, secret, uri) {
+          return {
+            ...this,
+            _clientId: id,
+            _clientSecret: secret,
+            redirectUri: uri,
+            setCredentials: jest.fn(function (credential) {
+              this.credentials = { ...this.credentials, ...credential };
+            }),
+          };
+        }),
+      },
+    },
+  };
+});
+jest.mock('nodemailer');
+
 describe('Mail Service', () => {
   let service: MailService;
 
   beforeEach(async () => {
-    const vars = {
-      oAuth2Client: undefined,
-      transporter: undefined,
-      gmail: undefined,
-    };
-
     vars.oAuth2Client = new google.auth.OAuth2(
       options.gmailClientID,
       options.gmailSecretKey,
-      'https://test.redirect.com',
+      'https://www.test.com',
     );
     vars.oAuth2Client.setCredentials({ refresh_token: options.refreshToken });
+    // vars.gmail = google.gmail({
+    //   version: 'v1',
+    //   auth: vars.oAuth2Client,
+    // });
 
-    vars.gmail = google.gmail({
-      version: 'v1',
-      auth: vars.oAuth2Client,
-    });
-
-    vars.transporter = mailer.createTransport({
-      service: 'gmail',
-      host: 'smtp.google.com',
-      port: 587,
-      secure: true,
-      auth: {
-        type: 'OAuth2',
-        user: options.oAuthUser,
-        clientId: options.gmailClientID,
-        clientSecret: options.gmailSecretKey,
-        refreshToken: options.refreshToken,
-      },
-    });
+    // vars.transporter = mailer.createTransport({
+    //   service: 'gmail',
+    //   host: 'smtp.google.com',
+    //   port: 587,
+    //   secure: true,
+    //   auth: {
+    //     type: 'OAuth2',
+    //     user: options.oAuthUser,
+    //     clientId: options.gmailClientID,
+    //     clientSecret: options.gmailSecretKey,
+    //     refreshToken: options.refreshToken,
+    //   },
+    // });
 
     const module = await Test.createTestingModule({
       providers: [
@@ -66,12 +83,21 @@ describe('Mail Service', () => {
       ],
     }).compile();
 
-    console.log(vars);
-
     service = module.get<MailService>(MailService);
   });
 
-  it('should be defined', () => {
-    expect(service).toBeDefined();
+  describe('should be defined (service, vars)', () => {
+    it('should be defined(service)', () => {
+      expect(service).toBeDefined();
+    });
+
+    it('should be defined(vars)', () => {
+      expect(vars.oAuth2Client._clientId).toBe(options.gmailClientID);
+      expect(vars.oAuth2Client._clientSecret).toBe(options.gmailSecretKey);
+      expect(vars.oAuth2Client.redirectUri).toBe('https://www.test.com');
+      expect(vars.oAuth2Client.credentials['refresh_token']).toBe(
+        options.refreshToken,
+      );
+    });
   });
 });

@@ -13,12 +13,6 @@ const options = {
   gmailSecretKey: 'Gmail.SecretKey',
 };
 
-const vars = {
-  oAuth2Client: undefined,
-  transporter: undefined,
-  gmail: undefined,
-};
-
 jest.mock('googleapis', () => {
   return {
     google: {
@@ -42,6 +36,12 @@ jest.mock('nodemailer');
 
 describe('Mail Service', () => {
   let service: MailService;
+
+  const vars = {
+    oAuth2Client: undefined,
+    transporter: undefined,
+    gmail: undefined,
+  };
 
   beforeEach(async () => {
     vars.oAuth2Client = new google.auth.OAuth2(

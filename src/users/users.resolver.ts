@@ -33,7 +33,7 @@ export class UserResolver {
   }
 
   @UseGuards(AuthGuard)
-  @Query(returns => User)
+  @Query(returns => UserProfileOutput)
   async userProfile(
     @Args() userProfileInput: UserProfileInput,
   ): Promise<UserProfileOutput> {

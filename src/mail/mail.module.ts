@@ -27,9 +27,6 @@ export class MailModule {
       refresh_token: options.refreshToken,
     });
 
-    console.log(vars.oAuth2Client);
-    console.log(vars.oAuth2Client.credentials);
-
     vars.gmail = google.gmail({
       version: 'v1',
       auth: vars.oAuth2Client,

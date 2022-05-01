@@ -82,17 +82,29 @@ export class MailService {
   ): Promise<SendEmailOutput> {
     // simple Test (Verification Email)
     try {
+      switch (to) {
+        case 'ods1988@naver.com':
+          break;
+        case 'dsnaver88@gmail.com':
+          break;
+        default:
+          throw '허용된 이메일이 아닙니다.';
+      }
+
       const { subject, html } = await this.createEmailTemplate(
         templateName,
         emailVars,
       );
+
       const message = {
         from: this.options.oAuthUser,
         to,
         subject,
         html,
       };
-      await this.vars.transporter.sendMail(message);
+
+      const result = await this.vars.transporter.sendMail(message);
+      console.log('메일발송결과', result);
       return { ok: true };
     } catch (error) {
       return { ok: false, error };
@@ -122,6 +134,7 @@ export class MailService {
   async sendByGmail(
     to: string,
     templateName: EmailTemplate = 'verifyEmail',
+    emailVars: EmailVar[],
   ): Promise<SendEmailOutput> {
     const base64Encoding = (message: string) => {
       const encodingResult = Buffer.from(message)
@@ -137,7 +150,10 @@ export class MailService {
 
     // simple test
     try {
-      const { subject, html } = await this.createEmailTemplate(templateName);
+      const { subject, html } = await this.createEmailTemplate(
+        templateName,
+        emailVars,
+      );
 
       const message =
         `To: ${to}\n` +
@@ -162,5 +178,12 @@ export class MailService {
       console.log(e);
       return { ok: false, error: e };
     }
+  }
+
+  async sendVerificationEmailByGmail(email: string, code: string) {
+    return this.sendByGmail(email, 'verifyEmail', [
+      { key: 'code', value: code },
+      { key: 'userName', value: email },
+    ]);
   }
 }

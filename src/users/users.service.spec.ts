@@ -3,7 +3,7 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { JwtService } from 'src/jwt/jwt.service';
 import { MailService } from 'src/mail/mail.service';
 import { Repository } from 'typeorm';
-import { User } from './entities/user.entity';
+import { User, UserRole } from './entities/user.entity';
 import { Verification } from './entities/verification.entity';
 import { UserService } from './users.service';
 
@@ -71,7 +71,7 @@ describe('UserService', () => {
     const createAccoutArgs = {
       email: 'testAccount@gmail.com',
       password: 'testPassword123',
-      role: 0,
+      role: UserRole.Owner,
     };
 
     it('should fail if user exists', async () => {
@@ -218,24 +218,127 @@ describe('UserService', () => {
   });
 
   describe('editProfile', () => {
-    it('should change email', async () => {
-      const oldUser = {
-        email: 'oldUser@gmail.com',
-        emailVerified: true,
+    it('should fail args is empty', async () => {
+      const editProfileArgs = { userId: 1, input: {} };
+
+      const { ok, errors } = await service.editProfile(
+        editProfileArgs.userId,
+        editProfileArgs.input,
+      );
+
+      expect(ok).toBe(false);
+      expect(errors.email).toBeUndefined();
+      expect(errors.password).toBeUndefined();
+      expect(errors.error).toMatchObject({
+        name: 'invalid form',
+        message: 'This is not a valid input form',
+      });
+    });
+
+    it('should fail not found user', async () => {
+      const editProfileArgs = {
+        userId: 1,
+        input: { email: 'oldUser@test.com' },
       };
+
+      usersRepository.findOneOrFail.mockRejectedValue(
+        new Error('not found user'),
+      );
+
+      const { ok, errors } = await service.editProfile(
+        editProfileArgs.userId,
+        editProfileArgs.input,
+      );
+
+      expect(ok).toBe(false);
+      expect(errors.email).toBeUndefined();
+      expect(errors.password).toBeUndefined();
+      expect(errors.error.message).toBe('not found user');
+    });
+
+    it('should fail email is invalid(form, currently in use, exist)', async () => {
+      const editProfileArgs = {
+        userId: 1,
+        input: { email: 'oldUser@test.com' },
+      };
+
+      const mockedUser = {
+        checkEmailIsValid: jest.fn(() =>
+          Promise.reject({
+            email: { name: 'invalid', message: 'email is invalid' },
+          }),
+        ),
+      };
+
+      usersRepository.findOneOrFail.mockResolvedValue(mockedUser);
+
+      const { ok, errors } = await service.editProfile(
+        editProfileArgs.userId,
+        editProfileArgs.input,
+      );
+
+      expect(ok).toBe(false);
+      expect(errors.email).toMatchObject({
+        name: 'invalid',
+        message: 'email is invalid',
+      });
+    });
+
+    it('should fail password is invalid', async () => {
+      const editProfileArgs = {
+        userId: 1,
+        input: { password: 'oldPassword' },
+      };
+
+      const mockedUser = {
+        checkPasswordIsValid: jest.fn(() =>
+          Promise.reject({
+            password: { name: 'invalid', message: 'password is invalid' },
+          }),
+        ),
+      };
+
+      usersRepository.findOneOrFail.mockResolvedValue(mockedUser);
+
+      const { ok, errors } = await service.editProfile(
+        editProfileArgs.userId,
+        editProfileArgs.input,
+      );
+
+      expect(ok).toBe(false);
+      expect(errors.password).toMatchObject({
+        name: 'invalid',
+        message: 'password is invalid',
+      });
+    });
+
+    it('should change email', async () => {
       const editProfileArgs = {
         userId: 1,
         input: { email: 'new@gmail.com' },
       };
+
+      const mockedUserFunction = {
+        checkEmailIsValid: jest.fn(() => Promise.resolve(true)),
+      };
+
+      const mockedOldUser = {
+        id: editProfileArgs.userId,
+        email: 'oldUser@gmail.com',
+        emailVerified: true,
+        ...mockedUserFunction,
+      };
       const newVerification = {
         code: 'newCode',
       };
-      const newUser = {
+      const mockedNewUser = {
+        id: mockedOldUser.id,
         email: editProfileArgs.input.email,
         emailVerified: false,
+        ...mockedUserFunction,
       };
 
-      usersRepository.findOne.mockResolvedValue(oldUser);
+      usersRepository.findOneOrFail.mockResolvedValue(mockedOldUser);
 
       verificationsRepository.create.mockReturnValue(newVerification);
       verificationsRepository.save.mockResolvedValue(newVerification);
@@ -245,14 +348,24 @@ describe('UserService', () => {
         editProfileArgs.input,
       );
 
-      expect(usersRepository.findOne).toHaveBeenCalledTimes(1);
-      expect(usersRepository.findOne).toHaveBeenCalledWith({
-        id: editProfileArgs.userId,
+      expect(usersRepository.findOneOrFail).toHaveBeenCalledTimes(1);
+      expect(usersRepository.findOneOrFail).toHaveBeenCalledWith(
+        {
+          id: editProfileArgs.userId,
+        },
+        undefined,
+      );
+
+      expect(verificationsRepository.delete).toHaveBeenCalledTimes(1);
+      expect(verificationsRepository.delete).toBeCalledWith({
+        user: { id: mockedNewUser.id },
       });
 
       expect(verificationsRepository.create).toHaveBeenCalledTimes(1);
       expect(verificationsRepository.create).toHaveBeenCalledWith({
-        user: newUser,
+        user: {
+          ...mockedNewUser,
+        },
       });
 
       expect(verificationsRepository.save).toHaveBeenCalledTimes(1);
@@ -261,7 +374,7 @@ describe('UserService', () => {
       );
 
       expect(mailService.sendVerificationEmail).toHaveBeenCalledWith(
-        newUser.email,
+        mockedNewUser.email,
         newVerification.code,
       );
 
@@ -274,15 +387,38 @@ describe('UserService', () => {
         input: { password: 'newPassword' },
       };
 
-      usersRepository.findOne.mockResolvedValue({ password: 'oldPassword' });
+      const mockedUserFunction = {
+        checkPasswordIsValid: jest.fn(() => Promise.resolve(true)),
+      };
+
+      const mockedUser = {
+        id: editProfileArgs.userId,
+        email: 'testUser@test.com',
+        emailVerified: true,
+        password: 'oldPassword',
+        ...mockedUserFunction,
+      };
+
+      usersRepository.findOneOrFail.mockResolvedValue(mockedUser);
 
       const result = await service.editProfile(
         editProfileArgs.userId,
         editProfileArgs.input,
       );
 
+      expect(usersRepository.findOneOrFail).toHaveBeenCalledTimes(1);
+      expect(usersRepository.findOneOrFail).toHaveBeenCalledWith(
+        {
+          id: editProfileArgs.userId,
+        },
+        { select: ['id', 'email', 'emailVerified', 'password'] },
+      );
+
       expect(usersRepository.save).toHaveBeenCalledTimes(1);
-      expect(usersRepository.save).toHaveBeenCalledWith(editProfileArgs.input);
+      expect(usersRepository.save).toHaveBeenCalledWith({
+        ...mockedUser,
+        password: editProfileArgs.input.password,
+      });
 
       expect(result).toMatchObject({ ok: true });
     });
@@ -293,16 +429,42 @@ describe('UserService', () => {
         input: { email: 'newEmail@gmail.com' },
       };
 
-      usersRepository.findOne.mockRejectedValue(new Error());
+      usersRepository.findOneOrFail.mockRejectedValue(
+        new Error('fail on exception'),
+      );
 
-      const result = await service.editProfile(
+      const { ok, errors } = await service.editProfile(
         editProfileArgs.userId,
         editProfileArgs.input,
       );
 
-      expect(result).toMatchObject({
-        ok: false,
-        error: 'Could not update profile',
+      expect(ok).toBe(false);
+      expect(errors.error).toMatchObject({
+        name: 'Error',
+        message: 'fail on exception',
+      });
+    });
+
+    it('should fail on Exception, if error name is null, name seted systemError', async () => {
+      const editProfileArgs = {
+        userId: 1,
+        input: { email: 'newEmail@gmail.com' },
+      };
+
+      const mockedError = new Error('fail on exception');
+      mockedError.name = null;
+
+      usersRepository.findOneOrFail.mockRejectedValue(mockedError);
+
+      const { ok, errors } = await service.editProfile(
+        editProfileArgs.userId,
+        editProfileArgs.input,
+      );
+
+      expect(ok).toBe(false);
+      expect(errors.error).toMatchObject({
+        name: 'systemError',
+        message: 'fail on exception',
       });
     });
   });
@@ -361,7 +523,10 @@ describe('UserService', () => {
         { relations: ['user'] },
       );
 
-      expect(result).toMatchObject({ ok: false });
+      expect(result).toMatchObject({
+        ok: false,
+        error: 'not found verification',
+      });
     });
 
     it('should fail on Exception', async () => {

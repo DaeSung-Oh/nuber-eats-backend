@@ -20,4 +20,6 @@ export interface EmailVar {
   value: string;
 }
 
+export type ToLimitType = 'ods1988@naver.com' | 'dsnaver88@gmail.com';
+
 export type EmailTemplate = 'verifyEmail' | 'welcome';

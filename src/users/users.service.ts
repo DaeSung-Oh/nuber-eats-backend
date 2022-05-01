@@ -8,11 +8,16 @@ import {
 import { LoginInput, LoginOutput } from './dtos/login.dto';
 import { User } from './entities/user.entity';
 import { JwtService } from 'src/jwt/jwt.service';
-import { EditProfileInput, EditProfileOutput } from './dtos/edit-profile.dto';
+import {
+  EditProfileErrors,
+  EditProfileInput,
+  EditProfileOutput,
+} from './dtos/edit-profile.dto';
 import { Verification } from './entities/verification.entity';
 import { MailService } from 'src/mail/mail.service';
 import { UserProfileOutput } from './dtos/user-profile.dto';
 import { VerifyEmailOutput } from './dtos/verify-email.dto';
+import { argsIsEmpty } from 'src/common/core.util';
 
 @Injectable()
 export class UserService {
@@ -47,7 +52,10 @@ export class UserService {
           user,
         }),
       );
-      this.mailService.sendVerificationEmail(user.email, verification.code);
+      await this.mailService.sendVerificationEmail(
+        user.email,
+        verification.code,
+      );
       return { ok: true };
     } catch (e) {
       return { ok: false, error: 'Couldn`t create account' };
@@ -92,16 +100,53 @@ export class UserService {
     editProfileInput: EditProfileInput,
   ): Promise<EditProfileOutput> {
     try {
+      // verify that all arguments in edit profile are missing
+      if (argsIsEmpty(editProfileInput)) {
+        throw {
+          name: 'invalid form',
+          message: 'This is not a valid input form',
+        };
+      }
+
       const { email, password } = editProfileInput;
 
-      const user = await this.users.findOne({ id: userId });
+      const user = await this.users.findOneOrFail(
+        { id: userId },
+        password && {
+          select: ['id', 'email', 'emailVerified', 'password'],
+        },
+      );
+
+      let errors: EditProfileErrors = {};
+
+      // if email, verify email is valid
+      if (email) {
+        await user.checkEmailIsValid(email).catch(returnedError => {
+          if ('error' in returnedError) throw returnedError.error;
+          errors = { ...errors, ...returnedError };
+        });
+      }
+      // if password, verify password is valid
+      if (password) {
+        await user.checkPasswordIsValid(password).catch(returnedError => {
+          if ('error' in returnedError) throw returnedError.error;
+          errors = { ...errors, ...returnedError };
+        });
+      }
+
+      if (errors.email || errors.password) return { ok: false, errors };
+      // if no errors, edit profile
       if (email) {
         user.email = email;
         user.emailVerified = false;
+
+        this.verifications.delete({ user: { id: user.id } });
+
         const verification = await this.verifications.save(
           this.verifications.create({ user }),
         );
-        this.mailService.sendVerificationEmail(user.email, verification.code);
+
+        await this.mailService.sendVerificationEmail(email, verification.code);
       }
       if (password) {
         user.password = password;
@@ -109,7 +154,15 @@ export class UserService {
       await this.users.save(user);
       return { ok: true };
     } catch (error) {
-      return { ok: false, error: 'Could not update profile' };
+      return {
+        ok: false,
+        errors: {
+          error: {
+            name: error.name,
+            message: error.message,
+          },
+        },
+      };
     }
   }
 
@@ -127,7 +180,7 @@ export class UserService {
         await this.verifications.delete(verification.id);
         return { ok: true };
       }
-      return { ok: false };
+      return { ok: false, error: 'not found verification' };
     } catch (error) {
       return { ok: false, error };
     }

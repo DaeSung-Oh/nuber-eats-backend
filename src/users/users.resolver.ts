@@ -54,7 +54,7 @@ export class UserResolver {
   async createAccount(
     @Args('input') createAccoutInput: CreateAccountInput,
   ): Promise<CreateAccountOutput> {
-    return await this.usersService.createAccount(createAccoutInput);
+    return this.usersService.createAccount(createAccoutInput);
   }
 
   @Mutation(returns => LoginOutput)
@@ -82,7 +82,7 @@ export class UserResolver {
   }
 
   @Mutation(returns => SendEmailOutput)
-  sendGmail(@Args('input') { to, templateName }: SendEmailInput) {
-    return this.mailService.sendByGmail(to, templateName);
+  sendGmail(@Args('input') { to, templateName, emailVars }: SendEmailInput) {
+    return this.mailService.sendByGmail(to, templateName, emailVars);
   }
 }

@@ -1,5 +1,6 @@
 import { DynamicModule, Global, Module } from '@nestjs/common';
 import { google } from 'googleapis';
+import axios from 'axios';
 import * as mailer from 'nodemailer';
 import { CONFIG_OPTIONS } from 'src/common/common.constants';
 import { VARS } from './mail.constants';
@@ -23,6 +24,7 @@ export class MailModule {
       options.gmailSecretKey,
       'https://developers.google.com/oauthplayground',
     );
+
     vars.oAuth2Client.setCredentials({
       refresh_token: options.refreshToken,
     });
@@ -31,6 +33,7 @@ export class MailModule {
       version: 'v1',
       auth: vars.oAuth2Client,
     });
+
     vars.transporter = mailer.createTransport({
       service: 'gmail',
       host: 'smtp.google.com',

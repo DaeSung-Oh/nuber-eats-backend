@@ -6,6 +6,7 @@ import { Repository } from 'typeorm';
 import { User, UserRole } from './entities/user.entity';
 import { Verification } from './entities/verification.entity';
 import { UserService } from './users.service';
+import * as coreUtil from 'src/common/core.util';
 
 type mockRepository<T = any> = Partial<Record<keyof Repository<T>, jest.Mock>>;
 
@@ -33,6 +34,9 @@ describe('UserService', () => {
   let usersRepository: mockRepository<User>;
   let verificationsRepository: mockRepository<Verification>;
 
+  let mockedStaticEmailIsValid: jest.Mock;
+  let mockedStaticPasswordIsValid: jest.Mock;
+
   beforeEach(async () => {
     const module = await Test.createTestingModule({
       providers: [
@@ -56,6 +60,12 @@ describe('UserService', () => {
       ],
     }).compile();
 
+    mockedStaticEmailIsValid = jest.fn();
+    mockedStaticPasswordIsValid = jest.fn();
+
+    User.checkEmailIsValid = mockedStaticEmailIsValid;
+    User.checkPasswordIsValid = mockedStaticPasswordIsValid;
+
     service = module.get<UserService>(UserService);
     mailService = module.get<MailService>(MailService);
     jwtService = module.get<JwtService>(JwtService);
@@ -74,20 +84,50 @@ describe('UserService', () => {
       role: UserRole.Owner,
     };
 
-    it('should fail if user exists', async () => {
-      usersRepository.findOne.mockResolvedValue({
-        id: 1,
-        email: 'testUsers@gmail.com',
-      });
-      const result = await service.createAccount(createAccoutArgs);
-      expect(result).toMatchObject({
-        ok: false,
-        error: 'There is a user with that email already',
-      });
+    const mockedInvalidEmailError = {
+      email: {
+        name: 'invalid email',
+        message: 'This email invalid',
+      },
+    };
+    const mockedInvalidPasswordError = {
+      password: {
+        name: 'invalid password',
+        message: 'This password invalid',
+      },
+    };
+    const mockedSystemError = {
+      error: {
+        name: 'Error',
+        message: 'fail on exception',
+      },
+    };
+
+    it('should fail invalid email format or exists email', async () => {
+      mockedStaticEmailIsValid.mockRejectedValue(mockedInvalidEmailError);
+      mockedStaticPasswordIsValid.mockResolvedValue(true);
+
+      const { ok, errors } = await service.createAccount(createAccoutArgs);
+      expect(ok).toBe(false);
+      expect(errors.email).toMatchObject(mockedInvalidEmailError.email);
+    });
+
+    it('should fali invalid password format', async () => {
+      mockedStaticEmailIsValid.mockResolvedValue(true);
+      mockedStaticPasswordIsValid.mockRejectedValue(mockedInvalidPasswordError);
+
+      const { ok, errors } = await service.createAccount(createAccoutArgs);
+
+      expect(ok).toBe(false);
+      expect(errors.password).toMatchObject(
+        mockedInvalidPasswordError.password,
+      );
     });
 
     it('should create a new user', async () => {
-      usersRepository.findOne.mockResolvedValue(undefined);
+      mockedStaticEmailIsValid.mockResolvedValue(true);
+      mockedStaticPasswordIsValid.mockResolvedValue(true);
+
       usersRepository.create.mockReturnValue(createAccoutArgs);
 
       verificationsRepository.create.mockReturnValue({
@@ -98,7 +138,7 @@ describe('UserService', () => {
         code: 'testCode456',
       });
 
-      const result = await service.createAccount(createAccoutArgs);
+      const { ok, errors } = await service.createAccount(createAccoutArgs);
 
       expect(usersRepository.create).toHaveBeenCalledTimes(1);
       expect(usersRepository.create).toHaveBeenCalledWith(createAccoutArgs);
@@ -122,16 +162,15 @@ describe('UserService', () => {
         expect.any(String),
       );
 
-      expect(result).toMatchObject({ ok: true });
+      expect(ok).toBe(true);
+      expect(errors).toBeUndefined();
     });
 
     it('should fail on Exception', async () => {
-      usersRepository.findOne.mockRejectedValue(new Error());
-      const result = await service.createAccount(createAccoutArgs);
-      expect(result).toMatchObject({
-        ok: false,
-        error: 'Couldn`t create account',
-      });
+      mockedStaticEmailIsValid.mockRejectedValue(mockedSystemError);
+      const { ok, errors } = await service.createAccount(createAccoutArgs);
+      expect(ok).toBe(false);
+      expect(errors.error.message).toBe(mockedSystemError.error.message);
     });
   });
 
@@ -218,8 +257,19 @@ describe('UserService', () => {
   });
 
   describe('editProfile', () => {
+    const mockedArgIsEmpty = jest.fn();
+    beforeEach(() => {
+      jest.mock('src/common/core.util', () => {
+        return {
+          argsIsEmpty: mockedArgIsEmpty,
+        };
+      });
+    });
+
     it('should fail args is empty', async () => {
-      const editProfileArgs = { userId: 1, input: {} };
+      const editProfileArgs = { userId: 1, input: { email: '' } };
+
+      mockedArgIsEmpty.mockReturnValue(true);
 
       const { ok, errors } = await service.editProfile(
         editProfileArgs.userId,
@@ -227,8 +277,8 @@ describe('UserService', () => {
       );
 
       expect(ok).toBe(false);
-      expect(errors.email).toBeUndefined();
-      expect(errors.password).toBeUndefined();
+      expect(errors?.email).toBeUndefined();
+      expect(errors?.password).toBeUndefined();
       expect(errors.error).toMatchObject({
         name: 'invalid form',
         message: 'This is not a valid input form',
@@ -256,21 +306,29 @@ describe('UserService', () => {
       expect(errors.error.message).toBe('not found user');
     });
 
-    it('should fail email is invalid(form, currently in use, exist)', async () => {
+    it('should fail email is invalid(format, exist)', async () => {
       const editProfileArgs = {
         userId: 1,
         input: { email: 'oldUser@test.com' },
       };
 
       const mockedUser = {
-        checkEmailIsValid: jest.fn(() =>
-          Promise.reject({
-            email: { name: 'invalid', message: 'email is invalid' },
-          }),
-        ),
+        id: editProfileArgs.userId,
+        email: editProfileArgs.input.email,
+        emailVerified: true,
+        isCurrentlyUseEmail: jest.fn(() => Promise.resolve(false)),
       };
 
+      const mockedInvalidEmailError = {
+        email: {
+          name: 'invalid',
+          message: 'invalid Email',
+        },
+      };
+
+      mockedArgIsEmpty.mockReturnValue(false);
       usersRepository.findOneOrFail.mockResolvedValue(mockedUser);
+      mockedStaticEmailIsValid.mockRejectedValue(mockedInvalidEmailError);
 
       const { ok, errors } = await service.editProfile(
         editProfileArgs.userId,
@@ -278,10 +336,40 @@ describe('UserService', () => {
       );
 
       expect(ok).toBe(false);
-      expect(errors.email).toMatchObject({
-        name: 'invalid',
-        message: 'email is invalid',
-      });
+      expect(errors.email).toMatchObject(mockedInvalidEmailError.email);
+    });
+
+    it('should fail email is currently in use', async () => {
+      const editProfileArgs = {
+        userId: 1,
+        input: { email: 'oldUser@test.com' },
+      };
+
+      const mockedEmailError = {
+        email: {
+          name: 'currently in use',
+          message: 'This email currently in use',
+        },
+      };
+
+      const mockedUser = {
+        id: editProfileArgs.userId,
+        email: editProfileArgs.input.email,
+        emailVerified: true,
+        isCurrentlyUseEmail: jest.fn(() => Promise.reject(mockedEmailError)),
+      };
+
+      mockedArgIsEmpty.mockReturnValue(false);
+      usersRepository.findOneOrFail.mockResolvedValue(mockedUser);
+      mockedStaticEmailIsValid.mockResolvedValue(true);
+
+      const { ok, errors } = await service.editProfile(
+        editProfileArgs.userId,
+        editProfileArgs.input,
+      );
+
+      expect(ok).toBe(false);
+      expect(errors.email).toMatchObject(mockedEmailError.email);
     });
 
     it('should fail password is invalid', async () => {
@@ -290,15 +378,20 @@ describe('UserService', () => {
         input: { password: 'oldPassword' },
       };
 
-      const mockedUser = {
-        checkPasswordIsValid: jest.fn(() =>
-          Promise.reject({
-            password: { name: 'invalid', message: 'password is invalid' },
-          }),
-        ),
+      const mockedInvalidPasswordError = {
+        password: { name: 'invalid', message: 'password is invalid' },
       };
 
+      const mockedUser = {
+        id: editProfileArgs.userId,
+        email: 'testUser@gmail.com',
+        emailVerified: true,
+        password: 'Password.invalid',
+      };
+
+      mockedArgIsEmpty.mockReturnValue(false);
       usersRepository.findOneOrFail.mockResolvedValue(mockedUser);
+      mockedStaticPasswordIsValid.mockRejectedValue(mockedInvalidPasswordError);
 
       const { ok, errors } = await service.editProfile(
         editProfileArgs.userId,
@@ -306,10 +399,45 @@ describe('UserService', () => {
       );
 
       expect(ok).toBe(false);
-      expect(errors.password).toMatchObject({
-        name: 'invalid',
-        message: 'password is invalid',
-      });
+      expect(errors.password).toMatchObject(
+        mockedInvalidPasswordError.password,
+      );
+    });
+
+    it('should fail password is currently in use', async () => {
+      const editProfileArgs = {
+        userId: 1,
+        input: { password: 'oldPassword' },
+      };
+
+      const mockedPasswordError = {
+        password: {
+          name: 'currently in use',
+          message: 'This password currently in use',
+        },
+      };
+
+      const mockedUser = {
+        id: editProfileArgs.userId,
+        email: 'testUser@gmail.com',
+        emailVerified: true,
+        password: editProfileArgs.input.password,
+        isCurrentlyUsePassword: jest.fn(() =>
+          Promise.reject(mockedPasswordError),
+        ),
+      };
+
+      mockedArgIsEmpty.mockReturnValue(false);
+      usersRepository.findOneOrFail.mockResolvedValue(mockedUser);
+      mockedStaticPasswordIsValid.mockResolvedValue(true);
+
+      const { ok, errors } = await service.editProfile(
+        editProfileArgs.userId,
+        editProfileArgs.input,
+      );
+
+      expect(ok).toBe(false);
+      expect(errors.password).toMatchObject(mockedPasswordError.password);
     });
 
     it('should change email', async () => {
@@ -319,7 +447,7 @@ describe('UserService', () => {
       };
 
       const mockedUserFunction = {
-        checkEmailIsValid: jest.fn(() => Promise.resolve(true)),
+        isCurrentlyUseEmail: jest.fn(() => Promise.resolve(false)),
       };
 
       const mockedOldUser = {
@@ -338,12 +466,14 @@ describe('UserService', () => {
         ...mockedUserFunction,
       };
 
+      mockedArgIsEmpty.mockReturnValue(false);
       usersRepository.findOneOrFail.mockResolvedValue(mockedOldUser);
+      mockedStaticEmailIsValid.mockResolvedValue(true);
 
       verificationsRepository.create.mockReturnValue(newVerification);
       verificationsRepository.save.mockResolvedValue(newVerification);
 
-      const result = await service.editProfile(
+      const { ok, errors } = await service.editProfile(
         editProfileArgs.userId,
         editProfileArgs.input,
       );
@@ -358,7 +488,7 @@ describe('UserService', () => {
 
       expect(verificationsRepository.delete).toHaveBeenCalledTimes(1);
       expect(verificationsRepository.delete).toBeCalledWith({
-        user: { id: mockedNewUser.id },
+        user: { id: mockedOldUser.id },
       });
 
       expect(verificationsRepository.create).toHaveBeenCalledTimes(1);
@@ -378,7 +508,8 @@ describe('UserService', () => {
         newVerification.code,
       );
 
-      expect(result).toMatchObject({ ok: true });
+      expect(ok).toBe(true);
+      expect(errors).toBeUndefined();
     });
 
     it('should change password', async () => {
@@ -387,21 +518,19 @@ describe('UserService', () => {
         input: { password: 'newPassword' },
       };
 
-      const mockedUserFunction = {
-        checkPasswordIsValid: jest.fn(() => Promise.resolve(true)),
-      };
-
       const mockedUser = {
         id: editProfileArgs.userId,
-        email: 'testUser@test.com',
+        email: 'testUser@gmail.com',
         emailVerified: true,
-        password: 'oldPassword',
-        ...mockedUserFunction,
+        password: 'Password.old',
+        isCurrentlyUsePassword: jest.fn(() => Promise.resolve(false)),
       };
 
+      mockedArgIsEmpty.mockReturnValue(false);
       usersRepository.findOneOrFail.mockResolvedValue(mockedUser);
+      mockedStaticPasswordIsValid.mockResolvedValue(true);
 
-      const result = await service.editProfile(
+      const { ok, errors } = await service.editProfile(
         editProfileArgs.userId,
         editProfileArgs.input,
       );
@@ -420,7 +549,7 @@ describe('UserService', () => {
         password: editProfileArgs.input.password,
       });
 
-      expect(result).toMatchObject({ ok: true });
+      expect(ok).toBe(true);
     });
 
     it('should fail on Exception', async () => {
@@ -441,29 +570,6 @@ describe('UserService', () => {
       expect(ok).toBe(false);
       expect(errors.error).toMatchObject({
         name: 'Error',
-        message: 'fail on exception',
-      });
-    });
-
-    it('should fail on Exception, if error name is null, name seted systemError', async () => {
-      const editProfileArgs = {
-        userId: 1,
-        input: { email: 'newEmail@gmail.com' },
-      };
-
-      const mockedError = new Error('fail on exception');
-      mockedError.name = null;
-
-      usersRepository.findOneOrFail.mockRejectedValue(mockedError);
-
-      const { ok, errors } = await service.editProfile(
-        editProfileArgs.userId,
-        editProfileArgs.input,
-      );
-
-      expect(ok).toBe(false);
-      expect(errors.error).toMatchObject({
-        name: 'systemError',
         message: 'fail on exception',
       });
     });

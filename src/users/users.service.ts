@@ -34,19 +34,30 @@ export class UserService {
     password,
     role,
   }: CreateAccountInput): Promise<CreateAccountOutput> {
-    // if error exist, return error message(string).
-    // else return undefined (not return value)
+    // if error exist or invalid emailform, return error.
+    // else return ok is true
 
-    // check new user
-    // create user
     try {
-      const exist = await this.users.findOne({ email });
-      if (exist) {
-        return { ok: false, error: 'There is a user with that email already' };
-      }
+      // check email of new user
+      let errors: EditProfileErrors = {};
+
+      await User.checkEmailIsValid(email).catch(returnedError => {
+        if ('error' in returnedError) throw returnedError.error;
+        errors = { ...errors, ...returnedError };
+      });
+
+      await User.checkPasswordIsValid(password).catch(returnedError => {
+        if ('error' in returnedError) throw returnedError.error;
+        errors = { ...errors, ...returnedError };
+      });
+
+      if (errors?.email || errors?.password) return { ok: false, errors };
+
+      // create user
       const user = await this.users.save(
         this.users.create({ email, password, role }),
       );
+
       const verification = await this.verifications.save(
         this.verifications.create({
           user,
@@ -57,8 +68,11 @@ export class UserService {
         verification.code,
       );
       return { ok: true };
-    } catch (e) {
-      return { ok: false, error: 'Couldn`t create account' };
+    } catch (error) {
+      return {
+        ok: false,
+        errors: { error: { name: error.name, message: error.message } },
+      };
     }
   }
 
@@ -121,17 +135,33 @@ export class UserService {
 
       // if email, verify email is valid
       if (email) {
-        await user.checkEmailIsValid(email).catch(returnedError => {
-          if ('error' in returnedError) throw returnedError.error;
-          errors = { ...errors, ...returnedError };
-        });
+        const isValid = await User.checkEmailIsValid(email).catch(
+          returnedError => {
+            if ('error' in returnedError) throw returnedError.error;
+            errors = { ...errors, ...returnedError };
+          },
+        );
+
+        isValid &&
+          (await user.isCurrentlyUseEmail(email).catch(returnedError => {
+            if ('error' in returnedError) throw returnedError.error;
+            errors = { ...errors, ...returnedError };
+          }));
       }
       // if password, verify password is valid
       if (password) {
-        await user.checkPasswordIsValid(password).catch(returnedError => {
-          if ('error' in returnedError) throw returnedError.error;
-          errors = { ...errors, ...returnedError };
-        });
+        const isValid = await User.checkPasswordIsValid(password).catch(
+          returnedError => {
+            if ('error' in returnedError) throw returnedError.error;
+            errors = { ...errors, ...returnedError };
+          },
+        );
+
+        isValid &&
+          (await user.isCurrentlyUsePassword(password).catch(returnedError => {
+            if ('error' in returnedError) throw returnedError.error;
+            errors = { ...errors, ...returnedError };
+          }));
       }
 
       if (errors.email || errors.password) return { ok: false, errors };

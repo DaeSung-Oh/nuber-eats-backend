@@ -7,7 +7,7 @@ import { MailService } from 'src/mail/mail.service';
 import { Repository } from 'typeorm';
 import { User, UserRole } from './entities/user.entity';
 import { Verification } from './entities/verification.entity';
-import { userFieldErrors } from './users.constant';
+import { userFieldErrors } from './users.constants';
 import { UserService } from './users.service';
 
 type mockRepository<T = any> = Partial<Record<keyof Repository<T>, jest.Mock>>;

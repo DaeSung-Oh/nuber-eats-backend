@@ -15,7 +15,7 @@ import {
 import * as bcrypt from 'bcrypt';
 import { InternalServerErrorException } from '@nestjs/common';
 import { IsBoolean, IsEmail, IsEnum, IsString } from 'class-validator';
-import { userFieldErrors } from '../users.constant';
+import { userFieldErrors } from '../users.constants';
 
 export enum UserRole {
   Client = 'Client',

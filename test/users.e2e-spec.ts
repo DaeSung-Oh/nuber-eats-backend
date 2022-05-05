@@ -7,6 +7,8 @@ import * as mailer from 'nodemailer';
 import { User } from 'src/users/entities/user.entity';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Verification } from 'src/users/entities/verification.entity';
+import { userFieldErrors } from 'src/users/users.constants';
+import { utilError } from 'src/common/common.constants';
 
 const GRAPHQL_ENDPOINT = '/graphql';
 
@@ -15,6 +17,11 @@ const testUser = {
   password: 'testPassword@',
   role: 'Owner',
 };
+
+const INVALID_EMAIL_FORMAT = 'invalidMail';
+const LESSTHAN_PASSWORD = '1234!';
+const MORETHAN_PASSWORD = '12345678912345678@';
+const NOTCONTAIN_SPECIAL_PASSWORD = '12345678';
 
 describe('UserModule (e2e)', () => {
   let app: INestApplication;
@@ -46,11 +53,6 @@ describe('UserModule (e2e)', () => {
   });
 
   describe('createAccount', () => {
-    const INVALID_EMAIL_FORMAT = 'invalidMail';
-    const LESSTHAN_PASSWORD = '1234!';
-    const MORETHAN_PASSWORD = '12345678912345678@';
-    const NOTCONTAIN_SPECIAL_PASSWORD = '12345678';
-
     it('should fail if invalid email format', () => {
       return publicTest(`
       mutation {
@@ -62,6 +64,15 @@ describe('UserModule (e2e)', () => {
           ok
           errors {
             email {
+              name
+              message
+            }
+            password {
+              name
+              message
+            }
+            error {
+              name
               message
             }
           }
@@ -78,9 +89,11 @@ describe('UserModule (e2e)', () => {
             },
           } = res;
           expect(ok).toBe(false);
-          expect(errors.email.message).toBe(
-            'This email is not in the format of the email',
+          expect(errors.email).toMatchObject(
+            userFieldErrors.email.inValidFormatError,
           );
+          expect(errors.password).toBe(null);
+          expect(errors.error).toBe(null);
         });
     });
 
@@ -95,7 +108,16 @@ describe('UserModule (e2e)', () => {
           }) {
             ok
             errors {
+              email {
+                name
+                message
+              }
               password {
+                name
+                message
+              }
+              error {
+                name
                 message
               }
             }
@@ -112,9 +134,11 @@ describe('UserModule (e2e)', () => {
               },
             } = res;
             expect(ok).toBe(false);
-            expect(errors.password.message).toBe(
-              'Password must be at least 8 characters, no more than 16 characters',
+            expect(errors.password).toMatchObject(
+              userFieldErrors.password.inValidLengthError,
             );
+            expect(errors.email).toBe(null);
+            expect(errors.error).toBe(null);
           });
       });
 
@@ -128,7 +152,16 @@ describe('UserModule (e2e)', () => {
           }) {
             ok
             errors {
+              email {
+                name
+                message
+              }
               password {
+                name
+                message
+              }
+              error {
+                name
                 message
               }
             }
@@ -145,9 +178,11 @@ describe('UserModule (e2e)', () => {
               },
             } = res;
             expect(ok).toBe(false);
-            expect(errors.password.message).toBe(
-              'Password must be at least 8 characters, no more than 16 characters',
+            expect(errors.password).toMatchObject(
+              userFieldErrors.password.inValidLengthError,
             );
+            expect(errors.email).toBe(null);
+            expect(errors.error).toBe(null);
           });
       });
 
@@ -161,7 +196,16 @@ describe('UserModule (e2e)', () => {
           }) {
             ok
             errors {
+              email {
+                name
+                message
+              }
               password {
+                name
+                message
+              }
+              error {
+                name
                 message
               }
             }
@@ -178,9 +222,11 @@ describe('UserModule (e2e)', () => {
               },
             } = res;
             expect(ok).toBe(false);
-            expect(errors.password.message).toBe(
-              'At least one special character must be used',
+            expect(errors.password).toMatchObject(
+              userFieldErrors.password.notContainSpecialCharacterError,
             );
+            expect(errors.email).toBe(null);
+            expect(errors.error).toBe(null);
           });
       });
     });
@@ -196,12 +242,15 @@ describe('UserModule (e2e)', () => {
           ok
           errors {
             email {
+              name
               message
             }
             password {
+              name
               message
             }
             error {
+              name
               message
             }
           }
@@ -233,6 +282,15 @@ describe('UserModule (e2e)', () => {
           ok
           errors {
             email {
+              name
+              message
+            }
+            password {
+              name
+              message
+            }
+            error {
+              name
               message
             }
           }
@@ -249,7 +307,9 @@ describe('UserModule (e2e)', () => {
             },
           } = res;
           expect(ok).toBe(false);
-          expect(errors.email.message).toBe('This email already exists');
+          expect(errors.email).toMatchObject(
+            userFieldErrors.email.alreadyExistError,
+          );
         });
     });
   });
@@ -429,10 +489,6 @@ describe('UserModule (e2e)', () => {
   describe('edit profile', () => {
     const NEW_EMAIL = 'dsnaver88@gmail.com';
     const NEW_PASSWORD = 'newPassword@';
-    const INVALID_EMAIL_FORMAT = 'invalidMail';
-    const LESSTHAN_PASSWORD = '1234!';
-    const MORETHAN_PASSWORD = '12345678912345678@';
-    const NOTCONTAIN_SPECIAL_PASSWORD = '12345678';
 
     let user: User;
     let verification: Verification;
@@ -449,9 +505,124 @@ describe('UserModule (e2e)', () => {
     });
 
     describe('should fail if args(email, password) is empty', () => {
-      it.todo('should fail if email is empty');
-      it.todo('should fail if password is empty');
-      it.todo('should fail if email and password is empty');
+      it('should fail if email is empty', () => {
+        return privateTest(`
+          mutation {
+            editProfile(input: {
+              email: ""
+            }) {
+              ok
+              errors {
+                email {
+                  name
+                  message
+                }
+                password {
+                  name
+                  message
+                }
+                error {
+                  name
+                  message
+                }
+              }
+            }
+          }
+        `)
+          .expect(200)
+          .expect(res => {
+            const {
+              body: {
+                data: {
+                  editProfile: { ok, errors },
+                },
+              },
+            } = res;
+            expect(ok).toBe(false);
+            expect(errors.error).toMatchObject(utilError.argsIsEmptyError);
+            expect(errors.email).toBe(null);
+            expect(errors.password).toBe(null);
+          });
+      });
+      it('should fail if password is empty', () => {
+        return privateTest(`
+          mutation {
+            editProfile(input: {
+              password: ""
+            }) {
+              ok
+              errors {
+                email {
+                  name
+                  message
+                }
+                password {
+                  name
+                  message
+                }
+                error {
+                  name
+                  message
+                }
+              }
+            }
+          }
+        `)
+          .expect(200)
+          .expect(res => {
+            const {
+              body: {
+                data: {
+                  editProfile: { ok, errors },
+                },
+              },
+            } = res;
+            expect(ok).toBe(false);
+            expect(errors.error).toMatchObject(utilError.argsIsEmptyError);
+            expect(errors.email).toBe(null);
+            expect(errors.password).toBe(null);
+          });
+      });
+      it('should fail if email and password is empty', () => {
+        return privateTest(`
+          mutation {
+            editProfile(input: {
+              email: "",
+              password: ""
+            }) {
+              ok
+              errors {
+                email {
+                  name
+                  message
+                }
+                password {
+                  name
+                  message
+                }
+                error {
+                  name
+                  message
+                }
+              }
+            }
+          }
+        `)
+          .expect(200)
+          .expect(res => {
+            const {
+              body: {
+                data: {
+                  editProfile: { ok, errors },
+                },
+              },
+            } = res;
+            expect(ok).toBe(false);
+            expect(errors.error).toMatchObject(utilError.argsIsEmptyError);
+            expect(errors.email).toBe(null);
+            expect(errors.password).toBe(null);
+          });
+      });
     });
 
     it('should fail if invalid email format', () => {
@@ -463,6 +634,15 @@ describe('UserModule (e2e)', () => {
             ok
             errors {
               email {
+                name
+                message
+              }
+              password {
+                name
+                message
+              }
+              error {
+                name
                 message
               }
             }
@@ -479,9 +659,11 @@ describe('UserModule (e2e)', () => {
             },
           } = res;
           expect(ok).toBe(false);
-          expect(errors.email.message).toBe(
-            'This email is not in the format of the email',
+          expect(errors.email).toMatchObject(
+            userFieldErrors.email.inValidFormatError,
           );
+          expect(errors.password).toBe(null);
+          expect(errors.error).toBe(null);
         });
     });
 
@@ -494,6 +676,15 @@ describe('UserModule (e2e)', () => {
             ok
             errors {
               email {
+                name
+                message
+              }
+              password {
+                name
+                message
+              }
+              error {
+                name
                 message
               }
             }
@@ -510,7 +701,11 @@ describe('UserModule (e2e)', () => {
             },
           } = res;
           expect(ok).toBe(false);
-          expect(errors.email.message).toBe('This email currently in use');
+          expect(errors.email).toMatchObject(
+            userFieldErrors.email.currentlyInUseError,
+          );
+          expect(errors.password).toBe(null);
+          expect(errors.error).toBe(null);
         });
     });
 
@@ -522,7 +717,16 @@ describe('UserModule (e2e)', () => {
           }) {
             ok
             errors {
+              email {
+                name
+                message
+              }
               password {
+                name
+                message
+              }
+              error {
+                name
                 message
               }
             }
@@ -539,10 +743,9 @@ describe('UserModule (e2e)', () => {
             },
           } = res;
           expect(ok).toBe(false);
-          expect(errors.password).toMatchObject({
-            name: 'currently in use',
-            message: 'This password currently in use',
-          });
+          expect(errors.password).toMatchObject(
+            userFieldErrors.password.currentlyInUseError,
+          );
           expect(errors.email).toBe(null);
           expect(errors.error).toBe(null);
         });
@@ -557,7 +760,16 @@ describe('UserModule (e2e)', () => {
             }) {
               ok
               errors {
+                email {
+                  name
+                  message
+                }
                 password {
+                  name
+                  message
+                }
+                error {
+                  name
                   message
                 }
               }
@@ -574,9 +786,11 @@ describe('UserModule (e2e)', () => {
               },
             } = res;
             expect(ok).toBe(false);
-            expect(errors.password.message).toBe(
-              'Password must be at least 8 characters, no more than 16 characters',
+            expect(errors.password).toMatchObject(
+              userFieldErrors.password.inValidLengthError,
             );
+            expect(errors.email).toBe(null);
+            expect(errors.error).toBe(null);
           });
       });
 
@@ -588,7 +802,16 @@ describe('UserModule (e2e)', () => {
             }) {
               ok
               errors {
+                email {
+                  name
+                  message
+                }
                 password {
+                  name
+                  message
+                }
+                error {
+                  name
                   message
                 }
               }
@@ -605,9 +828,11 @@ describe('UserModule (e2e)', () => {
               },
             } = res;
             expect(ok).toBe(false);
-            expect(errors.password.message).toBe(
-              'Password must be at least 8 characters, no more than 16 characters',
+            expect(errors.password).toMatchObject(
+              userFieldErrors.password.inValidLengthError,
             );
+            expect(errors.email).toBe(null);
+            expect(errors.error).toBe(null);
           });
       });
 
@@ -619,7 +844,16 @@ describe('UserModule (e2e)', () => {
             }) {
               ok
               errors {
+                email {
+                  name
+                  message
+                }
                 password {
+                  name
+                  message
+                }
+                error {
+                  name
                   message
                 }
               }
@@ -636,9 +870,11 @@ describe('UserModule (e2e)', () => {
               },
             } = res;
             expect(ok).toBe(false);
-            expect(errors.password.message).toBe(
-              'At least one special character must be used',
+            expect(errors.password).toMatchObject(
+              userFieldErrors.password.notContainSpecialCharacterError,
             );
+            expect(errors.email).toBe(null);
+            expect(errors.error).toBe(null);
           });
       });
     });
@@ -653,9 +889,15 @@ describe('UserModule (e2e)', () => {
             ok
             errors {
               email {
+                name
                 message
               }
               password {
+                name
+                message
+              }
+              error {
+                name
                 message
               }
             }
@@ -673,10 +915,13 @@ describe('UserModule (e2e)', () => {
           } = res;
 
           expect(ok).toBe(false);
-          expect(errors.email.message).toBe('This email currently in use');
-          expect(errors.password.message).toBe(
-            'This password currently in use',
+          expect(errors.email).toMatchObject(
+            userFieldErrors.email.currentlyInUseError,
           );
+          expect(errors.password).toMatchObject(
+            userFieldErrors.password.currentlyInUseError,
+          );
+          expect(errors.error).toBe(null);
         });
     });
 
@@ -759,6 +1004,7 @@ describe('UserModule (e2e)', () => {
 
       describe('Then', () => {
         afterAll(async () => {
+          // rollback email that before changed new email for continue testing
           await userRepository.update(
             { id: user.id },
             { email: testUser.email },
@@ -822,6 +1068,7 @@ describe('UserModule (e2e)', () => {
 
       describe('Then', () => {
         afterAll(async () => {
+          // rollback password that before changed new password for continue testing
           user.password = testUser.password;
           await userRepository.save(user);
         });

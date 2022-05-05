@@ -18,6 +18,7 @@ import { MailService } from 'src/mail/mail.service';
 import { UserProfileOutput } from './dtos/user-profile.dto';
 import { VerifyEmailOutput } from './dtos/verify-email.dto';
 import { argsIsEmpty } from 'src/common/core.util';
+import { utilError } from 'src/common/common.constants';
 
 @Injectable()
 export class UserService {
@@ -42,12 +43,12 @@ export class UserService {
       let errors: EditProfileErrors = {};
 
       await User.checkEmailIsValid(email).catch(returnedError => {
-        if ('error' in returnedError) throw returnedError.error;
+        if (returnedError?.error) throw returnedError.error;
         errors = { ...errors, ...returnedError };
       });
 
       await User.checkPasswordIsValid(password).catch(returnedError => {
-        if ('error' in returnedError) throw returnedError.error;
+        if (returnedError?.error) throw returnedError.error;
         errors = { ...errors, ...returnedError };
       });
 
@@ -116,56 +117,64 @@ export class UserService {
     try {
       // verify that all arguments in edit profile are missing
       if (argsIsEmpty(editProfileInput)) {
-        throw {
-          name: 'invalid form',
-          message: 'This is not a valid input form',
-        };
+        throw utilError.argsIsEmptyError;
       }
 
       const { email, password } = editProfileInput;
 
-      const user = await this.users.findOneOrFail(
-        { id: userId },
-        password && {
-          select: ['id', 'email', 'emailVerified', 'password'],
-        },
-      );
+      // const user = await this.users.findOneOrFail(
+      //   { id: userId },
+      //   password && {
+      //     select: ['id', 'email', 'emailVerified', 'password'],
+      //   },
+      // );
+
+      const user = password
+        ? await this.users.findOneOrFail(
+            { id: userId },
+            { select: ['id', 'email', 'emailVerified', 'password'] },
+          )
+        : await this.users.findOneOrFail({ id: userId });
 
       let errors: EditProfileErrors = {};
 
       // if email, verify email is valid
       if (email) {
-        const isValid = await User.checkEmailIsValid(email).catch(
-          returnedError => {
+        // check currently in use email
+        const isNotCurrentlyInUse = await user
+          .isNotCurrentlyInUseEmail(email)
+          .catch(returnedError => {
             if ('error' in returnedError) throw returnedError.error;
             errors = { ...errors, ...returnedError };
-          },
-        );
-
-        isValid &&
-          (await user.isCurrentlyUseEmail(email).catch(returnedError => {
+          });
+        // check email is valid
+        isNotCurrentlyInUse &&
+          (await User.checkEmailIsValid(email).catch(returnedError => {
             if ('error' in returnedError) throw returnedError.error;
             errors = { ...errors, ...returnedError };
           }));
       }
       // if password, verify password is valid
       if (password) {
-        const isValid = await User.checkPasswordIsValid(password).catch(
-          returnedError => {
-            if ('error' in returnedError) throw returnedError.error;
+        // check currently in use password
+        const isNotCurrentlyInuse = await user
+          .isNotCurrentlyInUsePassword(password)
+          .catch(returnedError => {
+            if (returnedError?.error) throw returnedError.error;
             errors = { ...errors, ...returnedError };
-          },
-        );
-
-        isValid &&
-          (await user.isCurrentlyUsePassword(password).catch(returnedError => {
+          });
+        // check password is valid
+        isNotCurrentlyInuse &&
+          (await User.checkPasswordIsValid(password).catch(returnedError => {
             if ('error' in returnedError) throw returnedError.error;
             errors = { ...errors, ...returnedError };
           }));
       }
 
+      // if email or password not invalid, return invalid of error
       if (errors.email || errors.password) return { ok: false, errors };
-      // if no errors, edit profile
+
+      // if email and password is valid, edit profile
       if (email) {
         user.email = email;
         user.emailVerified = false;

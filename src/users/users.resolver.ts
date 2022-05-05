@@ -59,7 +59,7 @@ export class UserResolver {
 
   @Mutation(returns => LoginOutput)
   async login(@Args('input') loginInput: LoginInput): Promise<LoginOutput> {
-    return await this.usersService.login(loginInput);
+    return this.usersService.login(loginInput);
   }
 
   @Mutation(returns => VerifyEmailOutput)

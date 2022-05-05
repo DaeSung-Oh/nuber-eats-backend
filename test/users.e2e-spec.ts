@@ -8,17 +8,11 @@ import { User } from 'src/users/entities/user.entity';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Verification } from 'src/users/entities/verification.entity';
 
-// jest.mock('nodemailer', () => {
-//   return {
-//     createTransport: jest.fn(),
-//   };
-// });
-
 const GRAPHQL_ENDPOINT = '/graphql';
 
 const testUser = {
   email: 'ods1988@naver.com',
-  password: '12345',
+  password: 'testPassword@',
   role: 'Owner',
 };
 
@@ -52,6 +46,145 @@ describe('UserModule (e2e)', () => {
   });
 
   describe('createAccount', () => {
+    const INVALID_EMAIL_FORMAT = 'invalidMail';
+    const LESSTHAN_PASSWORD = '1234!';
+    const MORETHAN_PASSWORD = '12345678912345678@';
+    const NOTCONTAIN_SPECIAL_PASSWORD = '12345678';
+
+    it('should fail if invalid email format', () => {
+      return publicTest(`
+      mutation {
+        createAccount(input: {
+          email: "${INVALID_EMAIL_FORMAT}",
+          password: "${testUser.password}",
+          role: ${testUser.role}
+        }) {
+          ok
+          errors {
+            email {
+              message
+            }
+          }
+        }
+      }
+      `)
+        .expect(200)
+        .expect(res => {
+          const {
+            body: {
+              data: {
+                createAccount: { ok, errors },
+              },
+            },
+          } = res;
+          expect(ok).toBe(false);
+          expect(errors.email.message).toBe(
+            'This email is not in the format of the email',
+          );
+        });
+    });
+
+    describe('should fali if invalid password format', () => {
+      it('should fail if password less than 8 characters', () => {
+        return publicTest(`
+        mutation {
+          createAccount(input: {
+            email: "${testUser.email}",
+            password: "${LESSTHAN_PASSWORD}",
+            role: ${testUser.role}
+          }) {
+            ok
+            errors {
+              password {
+                message
+              }
+            }
+          }
+        }
+        `)
+          .expect(200)
+          .expect(res => {
+            const {
+              body: {
+                data: {
+                  createAccount: { ok, errors },
+                },
+              },
+            } = res;
+            expect(ok).toBe(false);
+            expect(errors.password.message).toBe(
+              'Password must be at least 8 characters, no more than 16 characters',
+            );
+          });
+      });
+
+      it('should fail if password more than 16 characters', () => {
+        return publicTest(`
+        mutation {
+          createAccount(input: {
+            email: "${testUser.email}",
+            password: "${MORETHAN_PASSWORD}",
+            role: ${testUser.role}
+          }) {
+            ok
+            errors {
+              password {
+                message
+              }
+            }
+          }
+        }
+        `)
+          .expect(200)
+          .expect(res => {
+            const {
+              body: {
+                data: {
+                  createAccount: { ok, errors },
+                },
+              },
+            } = res;
+            expect(ok).toBe(false);
+            expect(errors.password.message).toBe(
+              'Password must be at least 8 characters, no more than 16 characters',
+            );
+          });
+      });
+
+      it('should fail if password does not contain special characters', () => {
+        return publicTest(`
+        mutation {
+          createAccount(input: {
+            email:"${testUser.email}",
+            password: "${NOTCONTAIN_SPECIAL_PASSWORD}",
+            role: ${testUser.role}
+          }) {
+            ok
+            errors {
+              password {
+                message
+              }
+            }
+          }
+        }
+        `)
+          .expect(200)
+          .expect(res => {
+            const {
+              body: {
+                data: {
+                  createAccount: { ok, errors },
+                },
+              },
+            } = res;
+            expect(ok).toBe(false);
+            expect(errors.password.message).toBe(
+              'At least one special character must be used',
+            );
+          });
+      });
+    });
+
     it('should create account', () => {
       return publicTest(`
       mutation {
@@ -61,7 +194,17 @@ describe('UserModule (e2e)', () => {
           role: ${testUser.role}
         }) {
           ok
-          error
+          errors {
+            email {
+              message
+            }
+            password {
+              message
+            }
+            error {
+              message
+            }
+          }
         }
       }
       `)
@@ -70,12 +213,12 @@ describe('UserModule (e2e)', () => {
           const {
             body: {
               data: {
-                createAccount: { ok, error },
+                createAccount: { ok, errors },
               },
             },
           } = res;
           expect(ok).toBe(true);
-          expect(error).toBe(null);
+          expect(errors).toBe(null);
         });
     });
 
@@ -88,7 +231,11 @@ describe('UserModule (e2e)', () => {
           role: ${testUser.role}
         }) {
           ok
-          error
+          errors {
+            email {
+              message
+            }
+          }
         }
       }
       `)
@@ -97,12 +244,12 @@ describe('UserModule (e2e)', () => {
           const {
             body: {
               data: {
-                createAccount: { ok, error },
+                createAccount: { ok, errors },
               },
             },
           } = res;
           expect(ok).toBe(false);
-          expect(error).toBe('There is a user with that email already');
+          expect(errors.email.message).toBe('This email already exists');
         });
     });
   });
@@ -281,7 +428,11 @@ describe('UserModule (e2e)', () => {
 
   describe('edit profile', () => {
     const NEW_EMAIL = 'dsnaver88@gmail.com';
-    const NEW_PASSWORD = 'new12345';
+    const NEW_PASSWORD = 'newPassword@';
+    const INVALID_EMAIL_FORMAT = 'invalidMail';
+    const LESSTHAN_PASSWORD = '1234!';
+    const MORETHAN_PASSWORD = '12345678912345678@';
+    const NOTCONTAIN_SPECIAL_PASSWORD = '12345678';
 
     let user: User;
     let verification: Verification;
@@ -297,7 +448,44 @@ describe('UserModule (e2e)', () => {
       verification = findVerification;
     });
 
-    it('should fail email currently in use', () => {
+    describe('should fail if args(email, password) is empty', () => {
+      it.todo('should fail if email is empty');
+      it.todo('should fail if password is empty');
+      it.todo('should fail if email and password is empty');
+    });
+
+    it('should fail if invalid email format', () => {
+      return privateTest(`
+        mutation {
+          editProfile(input:{
+            email: "${INVALID_EMAIL_FORMAT}"
+          }) {
+            ok
+            errors {
+              email {
+                message
+              }
+            }
+          }
+        }
+      `)
+        .expect(200)
+        .expect(res => {
+          const {
+            body: {
+              data: {
+                editProfile: { ok, errors },
+              },
+            },
+          } = res;
+          expect(ok).toBe(false);
+          expect(errors.email.message).toBe(
+            'This email is not in the format of the email',
+          );
+        });
+    });
+
+    it('should fail if email currently in use', () => {
       return privateTest(`
         mutation {
           editProfile(input: {
@@ -306,15 +494,6 @@ describe('UserModule (e2e)', () => {
             ok
             errors {
               email {
-                name
-                message
-              }
-              password {
-                name
-                message
-              }
-              error {
-                name
                 message
               }
             }
@@ -330,14 +509,8 @@ describe('UserModule (e2e)', () => {
               },
             },
           } = res;
-
           expect(ok).toBe(false);
-          expect(errors.email).toMatchObject({
-            name: 'currently in use',
-            message: 'This email currently in use',
-          });
-          expect(errors.password).toBe(null);
-          expect(errors.error).toBe(null);
+          expect(errors.email.message).toBe('This email currently in use');
         });
     });
 
@@ -349,16 +522,7 @@ describe('UserModule (e2e)', () => {
           }) {
             ok
             errors {
-              email {
-                name
-                message
-              }
               password {
-                name
-                message
-              }
-              error {
-                name
                 message
               }
             }
@@ -374,9 +538,6 @@ describe('UserModule (e2e)', () => {
               },
             },
           } = res;
-
-          console.log(ok, errors);
-
           expect(ok).toBe(false);
           expect(errors.password).toMatchObject({
             name: 'currently in use',
@@ -385,6 +546,101 @@ describe('UserModule (e2e)', () => {
           expect(errors.email).toBe(null);
           expect(errors.error).toBe(null);
         });
+    });
+
+    describe('should fail if invalid password format', () => {
+      it('should fail if password less than 8 characters', () => {
+        return privateTest(`
+          mutation {
+            editProfile(input: {
+              password: "${LESSTHAN_PASSWORD}"
+            }) {
+              ok
+              errors {
+                password {
+                  message
+                }
+              }
+            }
+          }
+        `)
+          .expect(200)
+          .expect(res => {
+            const {
+              body: {
+                data: {
+                  editProfile: { ok, errors },
+                },
+              },
+            } = res;
+            expect(ok).toBe(false);
+            expect(errors.password.message).toBe(
+              'Password must be at least 8 characters, no more than 16 characters',
+            );
+          });
+      });
+
+      it('should fail if password more than 16 characters', () => {
+        return privateTest(`
+          mutation {
+            editProfile(input: {
+              password: "${MORETHAN_PASSWORD}"
+            }) {
+              ok
+              errors {
+                password {
+                  message
+                }
+              }
+            }
+          }
+        `)
+          .expect(200)
+          .expect(res => {
+            const {
+              body: {
+                data: {
+                  editProfile: { ok, errors },
+                },
+              },
+            } = res;
+            expect(ok).toBe(false);
+            expect(errors.password.message).toBe(
+              'Password must be at least 8 characters, no more than 16 characters',
+            );
+          });
+      });
+
+      it('should fail if password does not contain special characters', () => {
+        return privateTest(`
+          mutation {
+            editProfile(input: {
+              password: "${NOTCONTAIN_SPECIAL_PASSWORD}"
+            }) {
+              ok
+              errors {
+                password {
+                  message
+                }
+              }
+            }
+          }
+        `)
+          .expect(200)
+          .expect(res => {
+            const {
+              body: {
+                data: {
+                  editProfile: { ok, errors },
+                },
+              },
+            } = res;
+            expect(ok).toBe(false);
+            expect(errors.password.message).toBe(
+              'At least one special character must be used',
+            );
+          });
+      });
     });
 
     it('should fail email and password currently in use', () => {
@@ -397,15 +653,9 @@ describe('UserModule (e2e)', () => {
             ok
             errors {
               email {
-                name
                 message
               }
               password {
-                name
-                message
-              }
-              error {
-                name
                 message
               }
             }
@@ -423,14 +673,10 @@ describe('UserModule (e2e)', () => {
           } = res;
 
           expect(ok).toBe(false);
-          expect(errors.email).toMatchObject({
-            name: 'currently in use',
-            message: 'This email currently in use',
-          });
-          expect(errors.password).toMatchObject({
-            name: 'currently in use',
-            message: 'This password currently in use',
-          });
+          expect(errors.email.message).toBe('This email currently in use');
+          expect(errors.password.message).toBe(
+            'This password currently in use',
+          );
         });
     });
 

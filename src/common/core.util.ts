@@ -4,5 +4,5 @@ export function isEmptyObject(obj: object): boolean {
 
 export function argsIsEmpty(args: object): boolean {
   const argsValues = Object.values(args);
-  return argsValues.some(arg => !arg);
+  return argsValues.length === 0 || argsValues.some(arg => !arg);
 }

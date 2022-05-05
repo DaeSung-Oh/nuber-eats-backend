@@ -15,7 +15,7 @@ import {
 import * as bcrypt from 'bcrypt';
 import { InternalServerErrorException } from '@nestjs/common';
 import { IsBoolean, IsEmail, IsEnum, IsString } from 'class-validator';
-import { validEmail } from '../profile.interface';
+import { userFieldErrors } from '../users.constant';
 
 export enum UserRole {
   Client = 'Client',
@@ -70,60 +70,52 @@ export class User extends CoreEntity {
     }
   }
 
-  async isCurrentlyUseEmail(email: string): Promise<boolean> {
+  async isNotCurrentlyInUseEmail(email: string): Promise<boolean> {
     try {
       return new Promise((resolve, reject) => {
         if (email === this.email) {
           reject({
-            email: {
-              name: 'currently in use',
-              message: 'This email currently in use',
-            },
+            email: userFieldErrors.email.currentlyInUseError,
           });
         }
-        resolve(false);
+        resolve(true);
       });
     } catch (error) {
-      throw 'email' in error
+      throw error?.email
         ? error
         : { error: { name: error.name, message: error.message } };
     }
   }
 
   static async checkEmailIsValid(email: string): Promise<boolean> {
-    const isInvalidEmail = new Promise((resolve, reject) => {
-      if (!validEmail.test(email)) {
+    const isValidEmailFormat = new Promise<boolean>((resolve, reject) => {
+      if (!/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,4}$/.test(email)) {
         reject({
-          email: {
-            name: 'invalid email form',
-            message: 'This email is not in the format of the email',
-          },
+          email: userFieldErrors.email.inValidFormatError,
         });
       }
-      resolve('valid email form');
+      resolve(true);
     }).catch(error => {
       throw error;
     });
 
-    const isExistEmail = new Promise(async (resolve, reject) => {
-      const repository = getRepository<User>(User);
-      const existUser = await repository.findOne({ email });
-      if (existUser) {
-        reject({
-          email: {
-            name: 'already exist',
-            message: 'This email already exists',
-          },
-        });
-        return;
-      }
-      resolve('not exist email');
-    }).catch(error => {
+    const isNotExistEmail: Promise<boolean> = new Promise<boolean>(
+      async (resolve, reject) => {
+        const repository = getRepository<User>(User);
+        const existUser = await repository.findOne({ email });
+        if (existUser) {
+          reject({
+            email: userFieldErrors.email.alreadyExistError,
+          });
+        }
+        resolve(true);
+      },
+    ).catch(error => {
       throw error;
     });
 
     try {
-      await Promise.all([isInvalidEmail, isExistEmail]);
+      await Promise.all([isValidEmailFormat, isNotExistEmail]);
       return true;
     } catch (error) {
       throw error?.email
@@ -132,21 +124,18 @@ export class User extends CoreEntity {
     }
   }
 
-  async isCurrentlyUsePassword(password: string) {
+  async isNotCurrentlyInUsePassword(password: string): Promise<boolean> {
     try {
       return new Promise(async (resolve, reject) => {
         if (await this.checkPassword(password)) {
           reject({
-            password: {
-              name: 'currently in use',
-              message: 'This password currently in use',
-            },
+            password: userFieldErrors.password.currentlyInUseError,
           });
         }
-        resolve(false);
+        resolve(true);
       });
     } catch (error) {
-      throw 'password' in error
+      throw error?.password
         ? error
         : { error: { name: error.name, message: error.message } };
     }
@@ -171,40 +160,37 @@ export class User extends CoreEntity {
     6) 비밀번호 변경 시 현재 사용 중인 비밀번호의 재사용은 불가능하며, 기존과는 다른 비밀번호로 변경하셔야 합니다.
   */
   static async checkPasswordIsValid(password: string): Promise<boolean> {
-    const isValidPasswordLength = new Promise((resolve, reject) => {
-      if (!/^.{8,16}$/.test(password)) {
-        reject({
-          password: {
-            name: 'invalid password length',
-            message:
-              'Password must be at least 8 characters, no more than 16 characters',
-          },
-        });
-      }
-      resolve('not currently in use password');
-    }).catch(error => {
+    const isValidPasswordLength: Promise<boolean> = new Promise<boolean>(
+      (resolve, reject) => {
+        if (!/^.{8,16}$/.test(password)) {
+          reject({
+            password: userFieldErrors.password.inValidLengthError,
+          });
+        }
+        resolve(true);
+      },
+    ).catch(error => {
       throw error;
     });
 
-    const isValidCharacter = new Promise((resolve, reject) => {
-      if (!/[!"#$%&'()*+,-./:;<=>?@^_`{|}~\[\]\\]{1,}/g.test(password)) {
-        reject({
-          password: {
-            name: 'special characters not included',
-            message: `At least one special character must be used`,
-          },
-        });
-      }
-      resolve('contains at least one special character');
-    }).catch(error => {
+    const isContainSpecialCharacter: Promise<boolean> = new Promise<boolean>(
+      (resolve, reject) => {
+        if (!/[!"#$%&'()*+,-./:;<=>?@^_`{|}~\[\]\\]{1,}/g.test(password)) {
+          reject({
+            password: userFieldErrors.password.notContainSpecialCharacterError,
+          });
+        }
+        resolve(true);
+      },
+    ).catch(error => {
       throw error;
     });
 
     try {
-      await Promise.all([isValidPasswordLength, isValidCharacter]);
+      await Promise.all([isValidPasswordLength, isContainSpecialCharacter]);
       return true;
     } catch (error) {
-      throw 'password' in error
+      throw error?.password
         ? error
         : { error: { name: error.name, message: error.message } };
     }

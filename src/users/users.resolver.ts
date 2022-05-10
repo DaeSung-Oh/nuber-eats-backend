@@ -1,7 +1,6 @@
-import { UseGuards } from '@nestjs/common';
 import { Resolver, Query, Args, Mutation } from '@nestjs/graphql';
 import { AuthUser } from 'src/auth/auth-user.decorator';
-import { AuthGuard } from 'src/auth/auth.guard';
+import { Role } from 'src/auth/role.decorator';
 import {
   SendEmailInput,
   SendEmailOutput,
@@ -26,30 +25,6 @@ export class UserResolver {
     private readonly mailService: MailService,
   ) {}
 
-  @UseGuards(AuthGuard)
-  @Query(returns => User)
-  me(@AuthUser() authUser: User) {
-    return authUser;
-  }
-
-  @UseGuards(AuthGuard)
-  @Query(returns => UserProfileOutput)
-  async userProfile(
-    @Args() userProfileInput: UserProfileInput,
-  ): Promise<UserProfileOutput> {
-    const { userId } = userProfileInput;
-    return await this.usersService.findById(userId);
-  }
-
-  @UseGuards(AuthGuard)
-  @Mutation(returns => EditProfileOutput)
-  async editProfile(
-    @AuthUser() authUser: User,
-    @Args('input') editProfileInput: EditProfileInput,
-  ): Promise<EditProfileOutput> {
-    return await this.usersService.editProfile(authUser.id, editProfileInput);
-  }
-
   @Mutation(returns => CreateAccountOutput)
   async createAccount(
     @Args('input') createAccoutInput: CreateAccountInput,
@@ -60,6 +35,30 @@ export class UserResolver {
   @Mutation(returns => LoginOutput)
   async login(@Args('input') loginInput: LoginInput): Promise<LoginOutput> {
     return this.usersService.login(loginInput);
+  }
+
+  @Query(returns => User)
+  @Role(['Any'])
+  me(@AuthUser() authUser: User) {
+    return authUser;
+  }
+
+  @Query(returns => UserProfileOutput)
+  @Role(['Any'])
+  async userProfile(
+    @Args() userProfileInput: UserProfileInput,
+  ): Promise<UserProfileOutput> {
+    const { userId } = userProfileInput;
+    return await this.usersService.findById(userId);
+  }
+
+  @Mutation(returns => EditProfileOutput)
+  @Role(['Any'])
+  async editProfile(
+    @AuthUser() authUser: User,
+    @Args('input') editProfileInput: EditProfileInput,
+  ): Promise<EditProfileOutput> {
+    return await this.usersService.editProfile(authUser.id, editProfileInput);
   }
 
   @Mutation(returns => VerifyEmailOutput)

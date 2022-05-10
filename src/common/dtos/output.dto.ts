@@ -1,4 +1,6 @@
 import { Field, ObjectType } from '@nestjs/graphql';
+import { User } from 'src/users/entities/user.entity';
+import { BaseEditErrorsType } from '../core.interface';
 
 @ObjectType()
 export class BaseError extends Error {
@@ -13,12 +15,6 @@ export class BaseError extends Error {
 }
 
 @ObjectType()
-export class CoreError {
-  @Field(type => BaseError, { nullable: true })
-  error?: Error;
-}
-
-@ObjectType()
 export class CoreOutput {
   @Field(type => String, { nullable: true })
   error?: string;
@@ -26,3 +22,13 @@ export class CoreOutput {
   @Field(type => Boolean)
   ok: boolean;
 }
+
+// @ObjectType()
+// export class BaseEditError<T, E = BaseError> {}
+
+// @ObjectType()
+// export class BaseEditErrorsOutput<T = User, E = BaseError> {
+//   @Field(type => Boolean)
+//   ok: boolean;
+//   errors?: BaseEditErrorsType<T, E>;
+// }

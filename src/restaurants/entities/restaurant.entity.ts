@@ -10,6 +10,8 @@ import {
   OneToMany,
   RelationId,
 } from 'typeorm';
+import { RestaurantNotFoundError } from '../error/RestaurantNotFoundError';
+import { UserIsNotPermissionToRestaurantError } from '../error/UserIsNotPermissionToRestaurantError';
 import { CheckRestaurantInput } from '../restaurants.interface';
 import { Category } from './category.entity';
 import { Menu } from './menu.entity';
@@ -57,33 +59,32 @@ export class Restaurant extends CoreEntity {
   @RelationId((restaurant: Restaurant) => restaurant.menus)
   menusId: number;
 
-  static async checkNullOrOwner({
+  static async checkNullAndIsOwner({
     restaurantId,
     userId,
-  }: CheckRestaurantInput): Promise<boolean> {
+  }: CheckRestaurantInput): Promise<any[]> {
     const restaurant = await getRepository<Restaurant>(Restaurant).findOne({
       id: restaurantId,
     });
 
-    const restaurantIsNotNull = new Promise<boolean>(
+    const restaurantIsNotNull = new Promise<Restaurant>(
       async (resolve, reject) => {
         if (!restaurant) {
-          reject(new Error('not found restaurnat'));
+          reject(new RestaurantNotFoundError());
         }
-        resolve(true);
+        resolve(restaurant);
       },
     );
 
     const userIsOwnerOfRestaurant = new Promise<boolean>((resolve, reject) => {
       if (userId !== restaurant.ownerId) {
-        reject(new Error('user is not owner of this restaurant'));
+        reject(new UserIsNotPermissionToRestaurantError());
       }
       resolve(true);
     });
 
     try {
-      await Promise.all([restaurantIsNotNull, userIsOwnerOfRestaurant]);
-      return true;
+      return await Promise.all([restaurantIsNotNull, userIsOwnerOfRestaurant]);
     } catch (e) {
       throw e;
     }

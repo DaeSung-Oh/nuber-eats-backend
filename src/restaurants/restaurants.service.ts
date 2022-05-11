@@ -26,6 +26,12 @@ import {
   SearchRestaurantInput,
   SearchRestaurantOutput,
 } from './dtos/search-restaurant.dto';
+import { Menu } from './entities/menu.entity';
+import { CreateMenuInput } from './dtos/menu/create-menu.dto';
+import { DeleteMenuInput, DeleteMenuOutput } from './dtos/menu/delete-menu.dto';
+import { MenuNotFoundError } from './error/MenuNotFoundError';
+import { UserIsNotPermissionToRestaurantError } from './error/UserIsNotPermissionToRestaurantError';
+import { EditMenuInput, EditMenuOutput } from './dtos/menu/edit-menu.dto';
 
 @Injectable()
 export class RestaurantService {
@@ -34,6 +40,8 @@ export class RestaurantService {
     private readonly restaurants: Repository<Restaurant>,
     @InjectRepository(Category)
     private readonly categories: Repository<Category>,
+    @InjectRepository(Menu)
+    private readonly menus: Repository<Menu>,
   ) {}
 
   // category
@@ -179,7 +187,10 @@ export class RestaurantService {
 
       return { ok: true, restaurants, totalPage, totalItems };
     } catch (error) {
-      return { ok: false, error: error?.message ?? 'not found restaurants' };
+      return {
+        ok: false,
+        error: error?.message ?? 'not found restaurants',
+      };
     }
   }
 
@@ -216,7 +227,7 @@ export class RestaurantService {
       const { restaurantId, categoryName } = editRestaurantInput;
 
       // check restaurant is null or user is owner of restaurant
-      await Restaurant.checkNullOrOwner({
+      await Restaurant.checkNullAndIsOwner({
         restaurantId,
         userId: owner.id,
       });
@@ -234,7 +245,10 @@ export class RestaurantService {
 
       return { ok: true };
     } catch (error) {
-      return { ok: false, error: error.message ?? 'Could not edit restaurant' };
+      return {
+        ok: false,
+        error: error.message ?? 'Could not edit restaurant',
+      };
     }
   }
 
@@ -244,7 +258,7 @@ export class RestaurantService {
   ): Promise<DeleteRestaurantOutput> {
     try {
       // check restaurant is null or user is owner of restaurant
-      await Restaurant.checkNullOrOwner({ restaurantId, userId: owner.id });
+      await Restaurant.checkNullAndIsOwner({ restaurantId, userId: owner.id });
 
       await this.restaurants.delete({ id: restaurantId });
 
@@ -253,6 +267,88 @@ export class RestaurantService {
       return {
         ok: false,
         error: error?.message ?? 'Could not delete restaurant',
+      };
+    }
+  }
+
+  // menu
+  async createMenu(
+    owner: User,
+    createMenuInput: CreateMenuInput,
+  ): Promise<CreateRestaurantOutput> {
+    try {
+      const [restaurant] = await Restaurant.checkNullAndIsOwner({
+        restaurantId: createMenuInput.restaurantId,
+        userId: owner.id,
+      });
+
+      this.menus.save(
+        this.menus.create({
+          ...createMenuInput,
+          restaurant,
+        }),
+      );
+
+      return { ok: true };
+    } catch (error) {
+      return {
+        ok: false,
+        error: error?.message ?? 'Could not create menu',
+      };
+    }
+  }
+
+  async editMenu(
+    owner: User,
+    editMenuInput: EditMenuInput,
+  ): Promise<EditMenuOutput> {
+    try {
+      const menu = await this.menus.findOne({ id: editMenuInput.menuId });
+      if (!menu) throw new MenuNotFoundError();
+
+      const restaurant = await this.restaurants.findOne({
+        id: menu.restaurantId,
+      });
+      if (owner.id !== restaurant.ownerId)
+        throw new UserIsNotPermissionToRestaurantError();
+
+      await this.menus.save([
+        {
+          id: editMenuInput.menuId,
+          ...editMenuInput,
+        },
+      ]);
+
+      return { ok: true };
+    } catch (error) {
+      return {
+        ok: false,
+        error: error?.message ?? 'Could not edit menu',
+      };
+    }
+  }
+
+  async deleteMenu(
+    owner: User,
+    { menuId }: DeleteMenuInput,
+  ): Promise<DeleteMenuOutput> {
+    try {
+      const [menu] = await this.menus.findByIds([menuId]);
+      if (!menu) throw new MenuNotFoundError();
+
+      const [restaurant] = await this.restaurants.findByIds([
+        menu.restaurantId,
+      ]);
+      if (owner.id !== restaurant.ownerId)
+        throw new UserIsNotPermissionToRestaurantError();
+
+      await this.menus.delete({ id: menuId });
+
+      return { ok: true };
+    } catch (error) {
+      return {
+        ok: false,
+        error: error?.message ?? 'Could not delete menu',
       };
     }
   }

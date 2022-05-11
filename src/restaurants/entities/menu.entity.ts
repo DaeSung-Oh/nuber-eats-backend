@@ -1,8 +1,32 @@
 import { Field, InputType, ObjectType } from '@nestjs/graphql';
 import { IsNumber, IsString, MaxLength } from 'class-validator';
 import { CoreEntity } from 'src/common/entities/core.entity';
-import { Column, Entity, ManyToOne, RelationId } from 'typeorm';
+import { Column, Entity, getRepository, ManyToOne, RelationId } from 'typeorm';
+import { MenuNotFoundError } from '../error/MenuNotFoundError';
 import { Restaurant } from './restaurant.entity';
+
+@InputType('MenuOptionChoiceInputType', { isAbstract: true })
+@ObjectType()
+class Choice {
+  @Field(type => String)
+  name: string;
+
+  @Field(type => Number, { nullable: true })
+  extra?: number;
+}
+
+@InputType('MenuOptionInputType', { isAbstract: true })
+@ObjectType()
+class MenuOption {
+  @Field(type => String)
+  name: string;
+
+  @Field(type => [Choice], { nullable: true })
+  choices?: Choice[];
+
+  @Field(type => Number, { nullable: true })
+  extra?: number;
+}
 
 @InputType('MenuInputType', { isAbstract: true })
 @ObjectType()
@@ -30,12 +54,27 @@ export class Menu extends CoreEntity {
   @MaxLength(255)
   description: string;
 
+  @Column({ type: 'json', nullable: true })
+  @Field(type => [MenuOption], { nullable: true })
+  options?: MenuOption[];
+
   @ManyToOne(type => Restaurant, restaurant => restaurant.menus, {
     onDelete: 'CASCADE',
+    nullable: false,
   })
   @Field(type => Restaurant)
   restaurant: Restaurant;
 
   @RelationId((menu: Menu) => menu.restaurant)
   restaurantId?: number;
+
+  async findById(id: number) {
+    try {
+      const menu = await getRepository<Menu>(Menu).findOne({ id });
+      if (!menu) throw new MenuNotFoundError();
+      return menu;
+    } catch (error) {
+      throw error;
+    }
+  }
 }

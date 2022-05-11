@@ -35,6 +35,9 @@ import {
   SearchRestaurantOutput,
 } from './dtos/search-restaurant.dto';
 import { Menu } from './entities/menu.entity';
+import { CreateMenuInput, CreateMenuOutput } from './dtos/menu/create-menu.dto';
+import { DeleteMenuInput, DeleteMenuOutput } from './dtos/menu/delete-menu.dto';
+import { EditMenuInput, EditMenuOutput } from './dtos/menu/edit-menu.dto';
 
 @Resolver(of => Restaurant)
 export class RestaurantResolver {
@@ -136,4 +139,31 @@ export class CategoryResolver {
 @Resolver(of => Menu)
 export class MenuResolver {
   constructor(private readonly restaurantsService: RestaurantService) {}
+
+  @Mutation(returns => CreateMenuOutput)
+  @Role(['Owner'])
+  createMenu(
+    @AuthUser() owner: User,
+    @Args('input') createMenuInput: CreateMenuInput,
+  ): Promise<CreateMenuOutput> {
+    return this.restaurantsService.createMenu(owner, createMenuInput);
+  }
+
+  @Mutation(returns => EditMenuOutput)
+  @Role(['Owner'])
+  editMenu(
+    @AuthUser() owner: User,
+    @Args('input') editMenuInput: EditMenuInput,
+  ): Promise<EditMenuOutput> {
+    return this.restaurantsService.editMenu(owner, editMenuInput);
+  }
+
+  @Mutation(returns => DeleteMenuOutput)
+  @Role(['Owner'])
+  deleteMenu(
+    @AuthUser() owner: User,
+    @Args('input') deleteMenuInput: DeleteMenuInput,
+  ): Promise<DeleteMenuOutput> {
+    return this.restaurantsService.deleteMenu(owner, deleteMenuInput);
+  }
 }

@@ -35,6 +35,7 @@ export class Category extends CoreEntity {
   @IsString()
   coverImage: string;
 
+  // relations
   @OneToMany(type => Restaurant, restaurant => restaurant.category, {
     nullable: true,
   })

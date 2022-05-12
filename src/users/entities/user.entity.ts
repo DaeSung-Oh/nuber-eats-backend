@@ -18,6 +18,7 @@ import { InternalServerErrorException } from '@nestjs/common';
 import { IsBoolean, IsEmail, IsEnum, IsString } from 'class-validator';
 import { userFieldErrors } from 'src/users/users.constants';
 import { Restaurant } from 'src/restaurants/entities/restaurant.entity';
+import { Order } from 'src/orders/entities/order.entity';
 
 export enum UserRole {
   Client = 'Client',
@@ -52,9 +53,18 @@ export class User extends CoreEntity {
   @IsBoolean()
   emailVerified: boolean;
 
+  // relations
   @OneToMany(type => Restaurant, restaurant => restaurant.owner)
   @Field(type => [Restaurant])
   restaurants: Restaurant[];
+
+  @OneToMany(type => Order, order => order.customer)
+  @Field(type => [Order])
+  orders: Order[];
+
+  @OneToMany(type => Order, order => order.driver)
+  @Field(type => [Order])
+  deliveryList: Order[];
 
   @BeforeInsert()
   @BeforeUpdate()

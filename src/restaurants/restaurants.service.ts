@@ -277,7 +277,7 @@ export class RestaurantService {
     createMenuInput: CreateMenuInput,
   ): Promise<CreateRestaurantOutput> {
     try {
-      const [restaurant] = await Restaurant.checkNullAndIsOwner({
+      const restaurant = await Restaurant.checkNullAndIsOwner({
         restaurantId: createMenuInput.restaurantId,
         userId: owner.id,
       });
@@ -306,11 +306,10 @@ export class RestaurantService {
       const menu = await this.menus.findOne({ id: editMenuInput.menuId });
       if (!menu) throw new MenuNotFoundError();
 
-      const restaurant = await this.restaurants.findOne({
-        id: menu.restaurantId,
+      await Restaurant.checkNullAndIsOwner({
+        restaurantId: menu.restaurantId,
+        userId: owner.id,
       });
-      if (owner.id !== restaurant.ownerId)
-        throw new UserIsNotPermissionToRestaurantError();
 
       await this.menus.save([
         {

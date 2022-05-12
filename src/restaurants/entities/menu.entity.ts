@@ -5,6 +5,27 @@ import { Column, Entity, getRepository, ManyToOne, RelationId } from 'typeorm';
 import { MenuNotFoundError } from '../error/MenuNotFoundError';
 import { Restaurant } from './restaurant.entity';
 
+/* 
+  options?: MenuOption[];
+
+  [
+    {
+      name: 사이즈,
+      basePrice: null
+      choices: [
+        {
+          name: Large,
+          extraPrice: 500
+        }, ...
+      ]
+    },
+    {
+      name: 피클
+      basePrice: 200,
+      choices: null
+    }, ...
+  ]
+*/
 @InputType('MenuOptionChoiceInputType', { isAbstract: true })
 @ObjectType()
 class Choice {
@@ -12,7 +33,7 @@ class Choice {
   name: string;
 
   @Field(type => Number, { nullable: true })
-  extra?: number;
+  extraPrice?: number;
 }
 
 @InputType('MenuOptionInputType', { isAbstract: true })
@@ -21,11 +42,11 @@ class MenuOption {
   @Field(type => String)
   name: string;
 
+  @Field(type => Number, { nullable: true })
+  basePrice?: number;
+
   @Field(type => [Choice], { nullable: true })
   choices?: Choice[];
-
-  @Field(type => Number, { nullable: true })
-  extra?: number;
 }
 
 @InputType('MenuInputType', { isAbstract: true })
@@ -58,23 +79,13 @@ export class Menu extends CoreEntity {
   @Field(type => [MenuOption], { nullable: true })
   options?: MenuOption[];
 
+  //relations
   @ManyToOne(type => Restaurant, restaurant => restaurant.menus, {
     onDelete: 'CASCADE',
     nullable: false,
   })
   @Field(type => Restaurant)
   restaurant: Restaurant;
-
   @RelationId((menu: Menu) => menu.restaurant)
   restaurantId?: number;
-
-  async findById(id: number) {
-    try {
-      const menu = await getRepository<Menu>(Menu).findOne({ id });
-      if (!menu) throw new MenuNotFoundError();
-      return menu;
-    } catch (error) {
-      throw error;
-    }
-  }
 }

@@ -1,6 +1,7 @@
 import { Field, InputType, ObjectType } from '@nestjs/graphql';
 import { IsString } from 'class-validator';
 import { CoreEntity } from 'src/common/entities/core.entity';
+import { Order } from 'src/orders/entities/order.entity';
 import { User } from 'src/users/entities/user.entity';
 import {
   Column,
@@ -41,28 +42,29 @@ export class Restaurant extends CoreEntity {
   })
   @Field(type => Category, { nullable: true })
   category?: Category;
-
   @RelationId((restaurant: Restaurant) => restaurant?.category)
   categoryId?: number;
 
   @ManyToOne(type => User, user => user.restaurants, { onDelete: 'CASCADE' })
   @Field(type => User)
   owner: User;
-
   @RelationId((restaurant: Restaurant) => restaurant.owner)
   ownerId: number;
 
   @OneToMany(type => Menu, menu => menu.restaurant)
   @Field(type => [Menu])
   menus: Menu[];
-
   @RelationId((restaurant: Restaurant) => restaurant.menus)
   menusId: number;
+
+  @OneToMany(type => Order, order => order.restaurant)
+  @Field(type => [Order])
+  orders: Order[];
 
   static async checkNullAndIsOwner({
     restaurantId,
     userId,
-  }: CheckRestaurantInput): Promise<any[]> {
+  }: CheckRestaurantInput): Promise<Restaurant> {
     const restaurant = await getRepository<Restaurant>(Restaurant).findOne({
       id: restaurantId,
     });
@@ -84,7 +86,10 @@ export class Restaurant extends CoreEntity {
     });
 
     try {
-      return await Promise.all([restaurantIsNotNull, userIsOwnerOfRestaurant]);
+      return await Promise.all([
+        restaurantIsNotNull,
+        userIsOwnerOfRestaurant,
+      ])[0];
     } catch (e) {
       throw e;
     }

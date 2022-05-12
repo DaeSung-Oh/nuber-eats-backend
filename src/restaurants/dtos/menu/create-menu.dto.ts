@@ -9,11 +9,11 @@ export class CreateMenuInput extends PickType(Menu, [
   'description',
   'options',
 ]) {
-  @Field(type => Number)
-  restaurantId: number;
-
   @Field(type => String, { nullable: true })
   photo?: string;
+
+  @Field(type => Number)
+  restaurantId: number;
 }
 
 @ObjectType()

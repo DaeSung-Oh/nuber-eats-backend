@@ -1,8 +1,7 @@
 import { Field, InputType, ObjectType } from '@nestjs/graphql';
 import { IsNumber, IsString, MaxLength } from 'class-validator';
 import { CoreEntity } from 'src/common/entities/core.entity';
-import { Column, Entity, getRepository, ManyToOne, RelationId } from 'typeorm';
-import { MenuNotFoundError } from '../error/MenuNotFoundError';
+import { Column, Entity, ManyToOne, RelationId } from 'typeorm';
 import { Restaurant } from './restaurant.entity';
 
 /* 
@@ -11,7 +10,6 @@ import { Restaurant } from './restaurant.entity';
   [
     {
       name: 사이즈,
-      basePrice: null
       choices: [
         {
           name: Large,
@@ -20,10 +18,20 @@ import { Restaurant } from './restaurant.entity';
       ]
     },
     {
-      name: 피클
-      basePrice: 200,
-      choices: null
-    }, ...
+      name: 휘핑
+      choices: [
+        {
+          name: 휘핑O,
+          extraPrice: 0
+        },
+        {
+          name: 휘핑 추가,
+          extraPrice: 500
+        }
+      ]
+    } 
+    
+    ...
   ]
 */
 @InputType('MenuOptionChoiceInputType', { isAbstract: true })
@@ -41,9 +49,6 @@ class Choice {
 class MenuOption {
   @Field(type => String)
   name: string;
-
-  @Field(type => Number, { nullable: true })
-  basePrice?: number;
 
   @Field(type => [Choice], { nullable: true })
   choices?: Choice[];

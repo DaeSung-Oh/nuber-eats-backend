@@ -29,15 +29,19 @@ import {
 import { Menu } from './entities/menu.entity';
 import { CreateMenuInput } from './dtos/menu/create-menu.dto';
 import { DeleteMenuInput, DeleteMenuOutput } from './dtos/menu/delete-menu.dto';
-import { MenuNotFoundError } from './error/MenuNotFoundError';
-import { UserIsNotPermissionToRestaurantError } from './error/UserIsNotPermissionToRestaurantError';
+import { NotPermissionToRestaurantError } from '../errors/NotPermissionToRestaurantError';
 import { EditMenuInput, EditMenuOutput } from './dtos/menu/edit-menu.dto';
+import { CheckInput, CheckOutput } from './dtos/check.dto';
+import { RestaurantRepository } from './repositories/restaurantRepository';
+import { MenuNotFoundError } from 'src/errors/NotFoundErrors';
 
 @Injectable()
 export class RestaurantService {
   constructor(
     @InjectRepository(Restaurant)
     private readonly restaurants: Repository<Restaurant>,
+    @InjectRepository(RestaurantRepository)
+    private readonly restaurantRepository: RestaurantRepository,
     @InjectRepository(Category)
     private readonly categories: Repository<Category>,
     @InjectRepository(Menu)
@@ -122,6 +126,16 @@ export class RestaurantService {
   }
 
   // restaurant
+
+  async checkNullAndIsOwner(checkInput: CheckInput): Promise<CheckOutput> {
+    try {
+      await this.restaurantRepository.checkNullAndIsOwner(checkInput);
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, error: error?.message };
+    }
+  }
+
   async createRestaurant(
     owner: User,
     createRestaurantInput: CreateRestaurantInput,
@@ -339,7 +353,7 @@ export class RestaurantService {
         menu.restaurantId,
       ]);
       if (owner.id !== restaurant.ownerId)
-        throw new UserIsNotPermissionToRestaurantError();
+        throw new NotPermissionToRestaurantError();
 
       await this.menus.delete({ id: menuId });
 

@@ -1,4 +1,4 @@
-import { Resolver, Query, Args, Mutation } from '@nestjs/graphql';
+import { Resolver, Query, Args, Mutation, ObjectType } from '@nestjs/graphql';
 import { AuthUser } from 'src/auth/auth-user.decorator';
 import { Role } from 'src/auth/role.decorator';
 import {
@@ -15,7 +15,7 @@ import { EditProfileInput, EditProfileOutput } from './dtos/edit-profile.dto';
 import { LoginInput, LoginOutput } from './dtos/login.dto';
 import { UserProfileInput, UserProfileOutput } from './dtos/user-profile.dto';
 import { VerifyEmailInput, VerifyEmailOutput } from './dtos/verify-email.dto';
-import { User } from './entities/user.entity';
+import { GqlUser, User } from './entities/user.entity';
 import { UserService } from './users.service';
 
 @Resolver(of => User)
@@ -37,9 +37,10 @@ export class UserResolver {
     return this.usersService.login(loginInput);
   }
 
-  @Query(returns => User)
+  @Query(returns => GqlUser)
   @Role(['Any'])
   me(@AuthUser() authUser: User) {
+    console.log('authUser: ', authUser);
     return authUser;
   }
 

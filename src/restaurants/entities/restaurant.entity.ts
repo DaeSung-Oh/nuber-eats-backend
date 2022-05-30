@@ -1,8 +1,9 @@
 import { Field, InputType, ObjectType } from '@nestjs/graphql';
 import { IsString } from 'class-validator';
 import { CoreEntity } from 'src/common/entities/core.entity';
+import { RestaurantNotFoundError } from 'src/errors/NotFoundErrors';
 import { Order } from 'src/orders/entities/order.entity';
-import { User } from 'src/users/entities/user.entity';
+import { Owner, User, UserRole } from 'src/users/entities/user.entity';
 import {
   Column,
   Entity,
@@ -11,8 +12,7 @@ import {
   OneToMany,
   RelationId,
 } from 'typeorm';
-import { RestaurantNotFoundError } from '../error/RestaurantNotFoundError';
-import { UserIsNotPermissionToRestaurantError } from '../error/UserIsNotPermissionToRestaurantError';
+import { NotPermissionToRestaurantError } from '../../errors/NotPermissionToRestaurantError';
 import { CheckRestaurantInput } from '../restaurants.interface';
 import { Category } from './category.entity';
 import { Menu } from './menu.entity';
@@ -45,9 +45,9 @@ export class Restaurant extends CoreEntity {
   @RelationId((restaurant: Restaurant) => restaurant?.category)
   categoryId?: number;
 
-  @ManyToOne(type => User, user => user.restaurants, { onDelete: 'CASCADE' })
-  @Field(type => User)
-  owner: User;
+  @ManyToOne(type => Owner, owner => owner.restaurants, { onDelete: 'CASCADE' })
+  @Field(type => Owner)
+  owner: Owner;
   @RelationId((restaurant: Restaurant) => restaurant.owner)
   ownerId: number;
 
@@ -80,7 +80,7 @@ export class Restaurant extends CoreEntity {
 
     const userIsOwnerOfRestaurant = new Promise<boolean>((resolve, reject) => {
       if (userId !== restaurant.ownerId) {
-        reject(new UserIsNotPermissionToRestaurantError());
+        reject(new NotPermissionToRestaurantError());
       }
       resolve(true);
     });

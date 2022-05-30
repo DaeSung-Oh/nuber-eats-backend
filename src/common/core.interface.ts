@@ -1,13 +1,7 @@
-import { BaseError } from './dtos/output.dto';
-
-export interface ICoreError {
-  error?: Error;
-}
-
-export interface ICoreErrors {
-  [key: string]: Error;
-}
-
-export type BaseEditErrorsType<T, E = BaseError> = Partial<
-  Record<keyof T | 'error', E>
->;
+export type NonFunctionalFieldName<T> = {
+  [K in keyof T]: T[K] extends (...args: any[]) => infer R ? never : K;
+}[keyof T];
+export type NonFunctionalFieldNames<T> = NonFunctionalFieldName<T>[];
+export type NonFunctionalFields<T> = {
+  [K in NonFunctionalFieldName<T>]?: T[K];
+};

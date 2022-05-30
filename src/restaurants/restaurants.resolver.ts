@@ -38,10 +38,16 @@ import { Menu } from './entities/menu.entity';
 import { CreateMenuInput, CreateMenuOutput } from './dtos/menu/create-menu.dto';
 import { DeleteMenuInput, DeleteMenuOutput } from './dtos/menu/delete-menu.dto';
 import { EditMenuInput, EditMenuOutput } from './dtos/menu/edit-menu.dto';
+import { CheckInput, CheckOutput } from './dtos/check.dto';
 
 @Resolver(of => Restaurant)
 export class RestaurantResolver {
   constructor(private readonly restaurantsService: RestaurantService) {}
+
+  @Query(returns => CheckOutput)
+  check(@Args('input') checkInput: CheckInput): Promise<CheckOutput> {
+    return this.restaurantsService.checkNullAndIsOwner(checkInput);
+  }
 
   @Mutation(returns => CreateRestaurantOutput)
   @Role(['Owner'])

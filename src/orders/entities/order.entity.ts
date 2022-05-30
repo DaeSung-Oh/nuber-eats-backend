@@ -6,28 +6,55 @@ import {
 } from '@nestjs/graphql';
 import { IsEnum, IsNumber } from 'class-validator';
 import { CoreEntity } from 'src/common/entities/core.entity';
-import { Menu } from 'src/restaurants/entities/menu.entity';
 import { Restaurant } from 'src/restaurants/entities/restaurant.entity';
-import { User } from 'src/users/entities/user.entity';
+import {
+  Client,
+  DeliveryMan,
+  User,
+  UserRole,
+} from 'src/users/entities/user.entity';
 import { Column, Entity, JoinTable, ManyToMany, ManyToOne } from 'typeorm';
+import { OrderMenu } from './orderMenu.entity';
 
 export enum OrderStatus {
   Pending = 'Pending',
   Cooking = 'Cooking',
+  Cooked = 'Cooked',
   PickedUp = 'PickedUp',
   Delivered = 'Delivered',
   Rejected = 'Rejected',
 }
+
+export enum CategoryReasonRejected {
+  ClientRequest = 'ClientRequest',
+  Restaurant = 'Restaurant',
+  Other = 'OtherReason',
+}
+
 registerEnumType(OrderStatus, { name: 'OrderStatus' });
+registerEnumType(CategoryReasonRejected, { name: 'CategoryReasonRejected' });
+
+@InputType('ReasonRejectedInputType', { isAbstract: true })
+@ObjectType()
+export class ReasonRejected {
+  @Field(type => CategoryReasonRejected)
+  reason: CategoryReasonRejected;
+  @Field(type => String, { nullable: true })
+  detail?: string;
+}
 
 @InputType('OrderInputType', { isAbstract: true })
 @ObjectType()
 @Entity()
 export class Order extends CoreEntity {
-  @Column({ type: 'enum', enum: OrderStatus })
+  @Column({ type: 'enum', enum: OrderStatus, default: OrderStatus.Pending })
   @Field(type => OrderStatus, { defaultValue: OrderStatus.Pending })
   @IsEnum(OrderStatus)
   orderStatus: OrderStatus;
+
+  @Column({ type: 'json', nullable: true })
+  @Field(type => ReasonRejected, { nullable: true })
+  reasonRejected?: ReasonRejected;
 
   @Column()
   @Field(type => Number)
@@ -35,19 +62,19 @@ export class Order extends CoreEntity {
   totalPrice: number;
 
   // relations
-  @ManyToOne(type => User, user => user.orders, {
+  @ManyToOne(type => Client, client => client.orders, {
     onDelete: 'SET NULL',
     nullable: true,
   })
   @Field(type => User, { nullable: true })
   customer?: User;
 
-  @ManyToOne(type => User, user => user.deliveryList, {
+  @ManyToOne(type => DeliveryMan, deliveryMan => deliveryMan.deliveryOrders, {
     onDelete: 'SET NULL',
     nullable: true,
   })
-  @Field(type => User, { nullable: true })
-  driver?: User;
+  @Field(type => DeliveryMan, { nullable: true })
+  driver?: DeliveryMan;
 
   @ManyToOne(type => Restaurant, restaurant => restaurant.orders, {
     onDelete: 'CASCADE',
@@ -55,8 +82,8 @@ export class Order extends CoreEntity {
   @Field(type => Restaurant)
   restaurant: Restaurant;
 
-  @ManyToMany(type => Menu)
-  @Field(type => [Menu])
+  @ManyToMany(type => OrderMenu)
+  @Field(type => [OrderMenu])
   @JoinTable()
-  menuList: Menu[];
+  orderMenuList: OrderMenu[];
 }

@@ -23,5 +23,11 @@ module.exports = {
     'prettier/prettier': 'off', // ['error', { endOfLine: 'auto', arrowParens: 'avoid' }],
     '@typescript-eslint/no-unused-vars': 'off',
     '@typescript-eslint/no-empty-function': 'off',
+    'prefer-const': [
+      'error',
+      {
+        ignoreReadBeforeAssign: false,
+      },
+    ], // available let variable
   },
 };

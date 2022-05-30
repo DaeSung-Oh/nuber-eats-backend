@@ -2,11 +2,12 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import {
+  CreateAccountErrors,
   CreateAccountInput,
   CreateAccountOutput,
 } from './dtos/create-account.dto';
 import { LoginInput, LoginOutput } from './dtos/login.dto';
-import { User } from './entities/user.entity';
+import { Owner, User, UserRole } from './entities/user.entity';
 import { JwtService } from 'src/jwt/jwt.service';
 import {
   EditProfileErrors,
@@ -17,13 +18,18 @@ import { Verification } from './entities/verification.entity';
 import { MailService } from 'src/mail/mail.service';
 import { UserProfileOutput } from './dtos/user-profile.dto';
 import { VerifyEmailOutput } from './dtos/verify-email.dto';
-import { argsIsEmpty } from 'src/common/core.util';
+import { argsContainEmptyValue } from 'src/common/core.util';
 import { utilError } from 'src/common/common.constants';
+import { UserRepository } from './repositories/userRepository';
+import { UserNotFoundError } from 'src/errors/NotFoundErrors';
+import { WrongPasswordError } from 'src/errors/WrongPasswordError';
 
 @Injectable()
 export class UserService {
   constructor(
     @InjectRepository(User) private readonly users: Repository<User>,
+    @InjectRepository(UserRepository)
+    private readonly userRepository: UserRepository,
     @InjectRepository(Verification)
     private readonly verifications: Repository<Verification>,
     private readonly jwtService: JwtService,
@@ -37,42 +43,32 @@ export class UserService {
   }: CreateAccountInput): Promise<CreateAccountOutput> {
     // if error exist or invalid emailform, return error.
     // else return ok is true
-
     try {
-      // check email of new user
-      let errors: EditProfileErrors = {};
-
-      await User.checkEmailIsValid(email).catch(returnedError => {
-        if (returnedError?.error) throw returnedError.error;
-        errors = { ...errors, ...returnedError };
+      // check email, password of new user
+      const validateUserResult = await this.userRepository.validateUser({
+        email,
+        password,
+        role,
       });
 
-      await User.checkPasswordIsValid(password).catch(returnedError => {
-        if (returnedError?.error) throw returnedError.error;
-        errors = { ...errors, ...returnedError };
+      if (validateUserResult !== true)
+        return { ok: false, errors: validateUserResult as CreateAccountErrors };
+      // create new User
+      await this.userRepository.saveWithVerification({
+        email,
+        password,
+        role,
       });
 
-      if (errors?.email || errors?.password) return { ok: false, errors };
-
-      // create user
-      const user = await this.users.save(
-        this.users.create({ email, password, role }),
-      );
-
-      const verification = await this.verifications.save(
-        this.verifications.create({
-          user,
-        }),
-      );
-      await this.mailService.sendVerificationEmail(
-        user.email,
-        verification.code,
-      );
       return { ok: true };
     } catch (error) {
       return {
         ok: false,
-        errors: { error: { name: error.name, message: error.message } },
+        errors: {
+          systemErrors: [
+            { name: error?.name, message: error?.message, stack: error?.stack },
+          ],
+        },
       };
     }
   }
@@ -80,18 +76,18 @@ export class UserService {
   async login({ email, password }: LoginInput): Promise<LoginOutput> {
     try {
       // find the user with the email
-      const user = await this.users.findOne(
+      const user = await this.userRepository.findOne(
         { email },
         { select: ['id', 'password'] },
       );
       if (!user) {
-        return { ok: false, error: 'User not found' };
+        return { ok: false, error: new UserNotFoundError().message };
       }
       // check if the password is correct
       // make a JWT and give it to the user
       const isUserPassword = await user.checkPassword(password);
       if (!isUserPassword) {
-        return { ok: false, error: 'Wrong Password' };
+        return { ok: false, error: new WrongPasswordError().message };
       }
       const token = this.jwtService.sign({ id: user.id });
 
@@ -103,7 +99,7 @@ export class UserService {
 
   async findById(id: number): Promise<UserProfileOutput> {
     try {
-      const user = await this.users.findOneOrFail({ id });
+      const user = await this.userRepository.findById(id);
       return { ok: true, user };
     } catch (error) {
       return { ok: false, error: 'User Not Found' };
@@ -116,12 +112,16 @@ export class UserService {
   ): Promise<EditProfileOutput> {
     try {
       // verify that all arguments in edit profile are missing
-      if (argsIsEmpty(editProfileInput)) {
-        throw utilError.argsIsEmptyError;
-      }
-
+      // if (argsIsEmpty(editProfileInput)) {
+      //   throw utilError.argsIsEmptyError;
+      // }
       const { email, password } = editProfileInput;
 
+      const user = await this.userRepository.findOne(
+        { id: userId },
+        { select: ['id', 'password'] },
+      );
+      await this.userRepository.validatePassword('', user);
       // const user = await this.users.findOneOrFail(
       //   { id: userId },
       //   password && {
@@ -129,6 +129,7 @@ export class UserService {
       //   },
       // );
 
+      /*
       const user = password
         ? await this.users.findOneOrFail(
             { id: userId },
@@ -191,15 +192,15 @@ export class UserService {
         user.password = password;
       }
       await this.users.save(user);
+      */
       return { ok: true };
     } catch (error) {
       return {
         ok: false,
         errors: {
-          error: {
-            name: error.name,
-            message: error.message,
-          },
+          systemErrors: [
+            { name: error?.name, message: error?.message, stack: error?.stack },
+          ],
         },
       };
     }

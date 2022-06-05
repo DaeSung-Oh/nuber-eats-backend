@@ -11,6 +11,14 @@ export class NotFoundError extends CoreError {
 }
 
 @ObjectType()
+export class VerificationNotFoundError extends NotFoundError {
+  constructor() {
+    super('Could Not Found Verification');
+    this.type = 'Verification';
+  }
+}
+
+@ObjectType()
 export class UserNotFoundError extends NotFoundError {
   constructor() {
     super('Could Not Found User');

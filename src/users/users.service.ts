@@ -1,13 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Connection, getConnection, Repository } from 'typeorm';
 import {
   CreateAccountErrors,
   CreateAccountInput,
   CreateAccountOutput,
 } from './dtos/create-account.dto';
 import { LoginInput, LoginOutput } from './dtos/login.dto';
-import { Owner, User, UserRole } from './entities/user.entity';
+import { User, UserRole } from './entities/user.entity';
 import { JwtService } from 'src/jwt/jwt.service';
 import {
   EditProfileErrors,
@@ -18,11 +18,15 @@ import { Verification } from './entities/verification.entity';
 import { MailService } from 'src/mail/mail.service';
 import { UserProfileOutput } from './dtos/user-profile.dto';
 import { VerifyEmailOutput } from './dtos/verify-email.dto';
-import { argsContainEmptyValue } from 'src/common/core.util';
-import { utilError } from 'src/common/common.constants';
 import { UserRepository } from './repositories/userRepository';
-import { UserNotFoundError } from 'src/errors/NotFoundErrors';
+import {
+  UserNotFoundError,
+  VerificationNotFoundError,
+} from 'src/errors/NotFoundErrors';
 import { WrongPasswordError } from 'src/errors/WrongPasswordError';
+
+// eslint-disable-next-line
+const chalk = require('chalk');
 
 @Injectable()
 export class UserService {
@@ -34,6 +38,7 @@ export class UserService {
     private readonly verifications: Repository<Verification>,
     private readonly jwtService: JwtService,
     private readonly mailService: MailService,
+    private readonly connection: Connection,
   ) {}
 
   async createAccount({
@@ -41,8 +46,6 @@ export class UserService {
     password,
     role,
   }: CreateAccountInput): Promise<CreateAccountOutput> {
-    // if error exist or invalid emailform, return error.
-    // else return ok is true
     try {
       // check email, password of new user
       const validateUserResult = await this.userRepository.validateUser({
@@ -53,11 +56,29 @@ export class UserService {
 
       if (validateUserResult !== true)
         return { ok: false, errors: validateUserResult as CreateAccountErrors };
-      // create new User
-      await this.userRepository.saveWithVerification({
-        email,
-        password,
-        role,
+
+      await this.connection.transaction(async manager => {
+        try {
+          // create and save User
+          const user = await manager.save(
+            manager.create(role, { email, password, role }),
+          );
+          // create and save Verification
+          const verification = await manager.save(
+            Verification,
+            manager.create(Verification, { user }),
+          );
+          // send email to Created User
+          const sendEmailResult = await this.mailService.sendVerificationEmail(
+            email,
+            verification.code,
+          );
+
+          console.log(chalk.white.bgYellow('SendEmailResult'));
+          console.log(chalk.yellow(sendEmailResult.res_string));
+        } catch (error) {
+          throw error;
+        }
       });
 
       return { ok: true };
@@ -80,6 +101,7 @@ export class UserService {
         { email },
         { select: ['id', 'password'] },
       );
+
       if (!user) {
         return { ok: false, error: new UserNotFoundError().message };
       }
@@ -100,9 +122,11 @@ export class UserService {
   async findById(id: number): Promise<UserProfileOutput> {
     try {
       const user = await this.userRepository.findById(id);
+      if (!user) throw new UserNotFoundError();
+
       return { ok: true, user };
     } catch (error) {
-      return { ok: false, error: 'User Not Found' };
+      return { ok: false, error };
     }
   }
 
@@ -111,95 +135,63 @@ export class UserService {
     editProfileInput: EditProfileInput,
   ): Promise<EditProfileOutput> {
     try {
-      // verify that all arguments in edit profile are missing
-      // if (argsIsEmpty(editProfileInput)) {
-      //   throw utilError.argsIsEmptyError;
-      // }
       const { email, password } = editProfileInput;
 
-      const user = await this.userRepository.findOne(
-        { id: userId },
-        { select: ['id', 'password'] },
+      const user = await this.userRepository.findOne(userId);
+      if (!user) throw new UserNotFoundError();
+
+      const validateResult = await this.userRepository.validateUser(
+        editProfileInput,
+        user,
       );
-      await this.userRepository.validatePassword('', user);
-      // const user = await this.users.findOneOrFail(
-      //   { id: userId },
-      //   password && {
-      //     select: ['id', 'email', 'emailVerified', 'password'],
-      //   },
-      // );
+      if (validateResult !== true)
+        return { ok: false, errors: validateResult as EditProfileErrors };
 
-      /*
-      const user = password
-        ? await this.users.findOneOrFail(
-            { id: userId },
-            { select: ['id', 'email', 'emailVerified', 'password'] },
-          )
-        : await this.users.findOneOrFail({ id: userId });
+      // DB transaction
+      const queryRunner = this.connection.createQueryRunner();
+      await queryRunner.connect();
+      await queryRunner.startTransaction();
 
-      let errors: EditProfileErrors = {};
-
-      // if email, verify email is valid
-      if (email) {
-        // check currently in use email
-        const isNotCurrentlyInUse = await user
-          .isNotCurrentlyInUseEmail(email)
-          .catch(returnedError => {
-            if ('error' in returnedError) throw returnedError.error;
-            errors = { ...errors, ...returnedError };
-          });
-        // check email is valid
-        isNotCurrentlyInUse &&
-          (await User.checkEmailIsValid(email).catch(returnedError => {
-            if ('error' in returnedError) throw returnedError.error;
-            errors = { ...errors, ...returnedError };
-          }));
-      }
-      // if password, verify password is valid
-      if (password) {
-        // check currently in use password
-        const isNotCurrentlyInuse = await user
-          .isNotCurrentlyInUsePassword(password)
-          .catch(returnedError => {
-            if (returnedError?.error) throw returnedError.error;
-            errors = { ...errors, ...returnedError };
-          });
-        // check password is valid
-        isNotCurrentlyInuse &&
-          (await User.checkPasswordIsValid(password).catch(returnedError => {
-            if ('error' in returnedError) throw returnedError.error;
-            errors = { ...errors, ...returnedError };
-          }));
-      }
-
-      // if email or password not invalid, return invalid of error
-      if (errors.email || errors.password) return { ok: false, errors };
-
-      // if email and password is valid, edit profile
-      if (email) {
-        user.email = email;
+      try {
+        // delete existing verification (1:1 relationship constraints),
+        // save new verification
+        await queryRunner.manager.delete(Verification, {
+          user: { id: userId },
+        });
         user.emailVerified = false;
+        const verification = await queryRunner.manager.save(Verification, {
+          user,
+        });
 
-        this.verifications.delete({ user: { id: user.id } });
+        // user save
+        await queryRunner.manager.save(user.role, {
+          ...user,
+          ...(email && { email }),
+          ...(password && { password }),
+        });
 
-        const verification = await this.verifications.save(
-          this.verifications.create({ user }),
-        );
-
+        // send email to user for verification
         await this.mailService.sendVerificationEmail(email, verification.code);
+
+        await queryRunner.commitTransaction();
+      } catch (error) {
+        await queryRunner.rollbackTransaction();
+      } finally {
+        await queryRunner.release();
       }
-      if (password) {
-        user.password = password;
-      }
-      await this.users.save(user);
-      */
+
       return { ok: true };
     } catch (error) {
       return {
         ok: false,
         errors: {
           systemErrors: [
-            { name: error?.name, message: error?.message, stack: error?.stack },
+            {
+              ...(error?.type && { type: error.type }),
+              name: error?.name,
+              message: error?.message,
+              stack: error?.stack,
+            },
           ],
         },
       };
@@ -220,9 +212,12 @@ export class UserService {
         await this.verifications.delete(verification.id);
         return { ok: true };
       }
-      return { ok: false, error: 'not found verification' };
+      return { ok: false, error: new VerificationNotFoundError() };
     } catch (error) {
-      return { ok: false, error };
+      return {
+        ok: false,
+        error: { name: error.name, message: error.message, stack: error.stack },
+      };
     }
   }
 }

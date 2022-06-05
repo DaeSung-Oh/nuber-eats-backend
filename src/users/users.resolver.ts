@@ -80,9 +80,4 @@ export class UserResolver {
   ): Promise<SendEmailOutput> {
     return this.mailService.sendVerificationEmail(email, code);
   }
-
-  @Mutation(returns => SendEmailOutput)
-  sendGmail(@Args('input') { to, templateName, emailVars }: SendEmailInput) {
-    return this.mailService.sendByGmail(to, templateName, emailVars);
-  }
 }

@@ -13,10 +13,3 @@ export const FIND_MANY_OPTIONS_KEYS: (keyof FindManyOptions<any>)[] = [
   'skip',
   'take',
 ];
-
-export const utilError = {
-  argsIsEmptyError: {
-    name: 'invalid form',
-    message: 'This is not a valid input form',
-  },
-};

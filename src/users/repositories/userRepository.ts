@@ -12,6 +12,7 @@ import {
   NonFunctionalFields,
 } from 'src/common/core.interface';
 import { isEmptyObject, isOfType } from 'src/common/core.util';
+import { CoreError } from 'src/errors';
 import { AlreadyExistError } from 'src/errors/AlreadyExistErrors';
 import {
   CurrentlyInUseEmailError,
@@ -37,6 +38,7 @@ import {
   CreateAccountErrors,
   CreateAccountInput,
 } from '../dtos/create-account.dto';
+import { EditProfileErrors, EditProfileInput } from '../dtos/edit-profile.dto';
 import {
   Client,
   DeliveryMan,
@@ -45,22 +47,15 @@ import {
   UserRole,
 } from '../entities/user.entity';
 import { Verification } from '../entities/verification.entity';
-import { USER_ENTITY_KEYS } from '../users.constants';
+import {
+  CREATE_ACCOUNT_INPUT_KEYS,
+  USER_ENTITY_KEYS,
+} from '../users.constants';
 
 export type UserEntity = NonFunctionalFields<
   User & Client & Owner & DeliveryMan
 >;
 export type UserEntityFieldNames = NonFunctionalFieldNames<UserEntity>;
-/*
- * Used for find operations.
- export declare type FindCondition<T> = FindConditions<T> | FindOperator<FindConditions<T>>;
-
- * Used for find operations.
- 
- export declare type FindConditions<T> = T | {
-    [P in keyof T]?: T[P] extends Promise<infer U> ? FindCondition<U> : FindCondition<T[P]>;
-};
-*/
 
 //
 @EntityRepository(User)
@@ -97,22 +92,26 @@ export abstract class UserRepository extends AbstractRepository<User> {
     }
   }
 
-  async saveWithVerification(user: UserEntity) {
+  async saveWithVerification(
+    user: CreateAccountInput,
+  ): Promise<[User, Verification]> {
     const queryRunner = this.connection.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
 
     try {
       const newUser = await queryRunner.manager.save(
-        queryRunner.manager.create(user.role, user),
+        user.role,
+        queryRunner.manager.create(user.role, { ...user }) as User,
       );
+      console.log('saveWithVerification Created User: ', { newUser });
       const newVerification = await queryRunner.manager.save(
         queryRunner.manager.create(Verification, { user: newUser }),
       );
 
       await queryRunner.commitTransaction();
 
-      return [newUser, newVerification];
+      return [newUser as any, newVerification];
     } catch (error) {
       await queryRunner.rollbackTransaction();
       throw error;
@@ -121,10 +120,13 @@ export abstract class UserRepository extends AbstractRepository<User> {
     }
   }
 
-  // [typeORM] findOne(overloading)
-  // findOne(id?: string | number | Date | ObjectID, options?: FindOneOptions<Entity>): Promise<Entity | undefined>;
-  // findOne(options?: FindOneOptions<Entity>): Promise<Entity | undefined>;
-  // findOne(conditions?: FindConditions<Entity>, options?: FindOneOptions<Entity>): Promise<Entity | undefined>;
+  /* 
+    [typeORM] findOne(overloading)
+
+    findOne(id?: string | number | Date | ObjectID, options?: FindOneOptions<Entity>): Promise<Entity | undefined>;
+    findOne(options?: FindOneOptions<Entity>): Promise<Entity | undefined>;
+    findOne(conditions?: FindConditions<Entity>, options?: FindOneOptions<Entity>): Promise<Entity | undefined>;
+  */
   async findOne(
     id?: string | number,
     options?: FindOneOptions<UserEntity>,
@@ -148,17 +150,19 @@ export abstract class UserRepository extends AbstractRepository<User> {
         arguments.length === 1 &&
         isOfType<FindOneOptions<UserEntity>>(arg1, FIND_ONE_OPTIONS_KEYS)
       ) {
-        options = { ...options, ...(arg1 as FindOneOptions<UserEntity>) };
-        console.log({ options });
+        options = { ...options, ...arg1 };
       }
 
       // findOne(id?: string | number, options?: FindOneOptions<UserEntity>)
       if (typeof arg1 === 'string' || typeof arg1 === 'number') {
         id = +arg1;
-        if (arg2)
+        if (
+          arg2 &&
+          isOfType<FindOneOptions<UserEntity>>(arg2, FIND_ONE_OPTIONS_KEYS)
+        )
           options = {
             ...options,
-            ...(arg2 as FindOneOptions<UserEntity>),
+            ...arg2,
           };
         // generate WHERE : WHERE (options.where...) AND id
         options?.where &&
@@ -177,11 +181,16 @@ export abstract class UserRepository extends AbstractRepository<User> {
       if (isOfType<FindConditions<UserEntity>>(arg1, USER_ENTITY_KEYS)) {
         conditions = {
           ...conditions,
-          ...(arg1 && { ...(arg1 as FindConditions<UserEntity>) }),
+          ...(arg1 && { ...arg1 }),
         };
+
         options = {
           ...options,
-          ...(arg2 && { ...(arg2 as FindOneOptions<UserEntity>) }),
+          ...(arg2 &&
+            isOfType<FindOneOptions<UserEntity>>(
+              arg2,
+              FIND_ONE_OPTIONS_KEYS,
+            ) && { ...arg2 }),
         };
 
         // generate WHERE : WHERE conditions
@@ -246,9 +255,12 @@ export abstract class UserRepository extends AbstractRepository<User> {
     }
   }
 
-  // [typeORM] find(overloading)
-  // find(options?: FindManyOptions<Entity>): Promise<Entity[]>;
-  // find(conditions?: FindConditions<Entity>): Promise<Entity[]>;
+  /* 
+    [typeORM] find(overloading)
+
+    find(options?: FindManyOptions<Entity>): Promise<Entity[]>;
+    find(conditions?: FindConditions<Entity>): Promise<Entity[]>;
+  */
   async find(options?: FindManyOptions<UserEntity>): Promise<User[]>;
   async find(conditions?: FindConditions<UserEntity>): Promise<User[]>;
   async find(
@@ -266,7 +278,7 @@ export abstract class UserRepository extends AbstractRepository<User> {
       if (isOfType<FindManyOptions<UserEntity>>(arg, FIND_MANY_OPTIONS_KEYS)) {
         options = {
           ...options,
-          ...(arg as FindManyOptions<UserEntity>),
+          ...arg,
         };
 
         const { where, select, relations, skip, take } = options;
@@ -300,7 +312,7 @@ export abstract class UserRepository extends AbstractRepository<User> {
       } else {
         conditions = {
           ...conditions,
-          ...(arg as FindConditions<UserEntity>),
+          ...arg,
         };
 
         // generate where
@@ -319,10 +331,105 @@ export abstract class UserRepository extends AbstractRepository<User> {
     }
   }
 
+  /*
+    [typeORM] findByIds(overloading)
+    
+    findByIds(ids: any[], options?: FindManyOptions<Entity>): Promise<Entity[]>;
+    findByIds(ids: any[], conditions?: FindConditions<Entity>): Promise<Entity[]>;
+  */
+  async findByIds(
+    ids: any[],
+    options?: FindManyOptions<UserEntity>,
+  ): Promise<User[]>;
+  async findByIds(
+    ids: any[],
+    conditions?: FindConditions<UserEntity>,
+  ): Promise<User[]>;
+  async findByIds(
+    ids: any[],
+    arg?: FindManyOptions<UserEntity> | FindConditions<UserEntity>,
+  ): Promise<User[]> {
+    try {
+      // ids: [] => return []
+      // where And user.id IN [ids] || conditions And user.id IN [ids]
+      if (ids.length === 0) return [] as User[];
+
+      let options: FindManyOptions<UserEntity> = {};
+      let conditions: FindConditions<UserEntity> = {};
+
+      const qb = this.repository.createQueryBuilder('user');
+
+      if (arg) {
+        if (
+          isOfType<FindManyOptions<UserEntity>>(arg, FIND_MANY_OPTIONS_KEYS)
+        ) {
+          options = {
+            ...options,
+            ...arg,
+          };
+
+          const { where, select, relations, skip, take } = options;
+
+          // generate where
+          where &&
+            qb.where(
+              new Brackets(qb => {
+                Object.entries(where).forEach(([field, value]) =>
+                  qb.andWhere(`user.${field} = :${field}`, { [field]: value }),
+                );
+              }),
+            );
+          qb.andWhere(`user.id IN (:...ids)`, { ids });
+
+          // generate relations
+          relations &&
+            relations.forEach(relatedField => {
+              qb.leftJoinAndSelect(`user.${relatedField}`, `${relatedField}`);
+            });
+
+          // generate select
+          select &&
+            select.forEach((selectedField, index) => {
+              index === 0
+                ? qb.select(`user.${selectedField}`)
+                : qb.addSelect(`user.${selectedField}`);
+            });
+
+          // set take, skip
+          qb.take(take ?? 10);
+          qb.skip(skip ?? 0);
+        } else {
+          conditions = {
+            ...conditions,
+            ...arg,
+          };
+
+          // generate where
+          conditions &&
+            qb.where(
+              new Brackets(qb => {
+                Object.entries(conditions).forEach(([field, value]) => {
+                  qb.andWhere(`user.${field} = :${field}`, { [field]: value });
+                });
+              }),
+            );
+          qb.andWhere(`user.id IN (:...ids)`, { ids });
+        }
+      }
+
+      return await qb.getMany();
+    } catch (error) {
+      throw error;
+    }
+  }
+
   // validation
-  async validateEmail(email: string): Promise<boolean>;
-  async validateEmail(email: string, user?: UserEntity): Promise<boolean>;
-  async validateEmail(email: string, user?: UserEntity): Promise<boolean> {
+  async validateEmail(email: string): Promise<boolean | CoreError>;
+  async validateEmail(email: string, user?: User): Promise<boolean | CoreError>;
+  async validateEmail(
+    email: string,
+    user?: User,
+  ): Promise<boolean | CoreError> {
     try {
       if (user) {
         // 현재 user의 이메일과 같은지 검사 (edit)
@@ -332,22 +439,26 @@ export abstract class UserRepository extends AbstractRepository<User> {
       // 이메일이 유효한 format인지 검사
       if (!/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,4}$/.test(email))
         throw new InvalidEmailFormatError();
-      // 다른 유저의 email과 같은지 검사 (create)
+      // 다른 유저의 email과 같은지 검사 (create & edit)
       if (await this.findOne({ email }))
         throw new AlreadyExistError<UserEntity>('email');
       return true;
     } catch (error) {
-      this.validateEmail('');
-      throw error;
+      return error?.type && error.type === 'Email'
+        ? error
+        : { name: error.name, message: error.message, stack: error?.stack };
     }
   }
 
-  async validatePassword(password: string): Promise<boolean>;
-  async validatePassword(password: string, user?: UserEntity): Promise<boolean>;
+  async validatePassword(password: string): Promise<boolean | CoreError>;
   async validatePassword(
     password: string,
-    user?: UserEntity,
-  ): Promise<boolean> {
+    user?: User,
+  ): Promise<boolean | CoreError>;
+  async validatePassword(
+    password: string,
+    user?: User,
+  ): Promise<boolean | CoreError> {
     /*
     [Naver 비밀번호 정책]
     * 안전하고 강력한 비밀번호 만들기 *
@@ -368,7 +479,7 @@ export abstract class UserRepository extends AbstractRepository<User> {
   */
     try {
       if (user) {
-        // 현재 user가 사용중인 password인지 검사
+        // 현재 user가 사용중인 password인지 검사 (edit)
         const existUser = await this.findOne(user, { select: ['password'] });
         if (existUser && (await existUser.checkPassword(existUser.password)))
           throw new CurrentlyInUsePasswordError();
@@ -380,50 +491,72 @@ export abstract class UserRepository extends AbstractRepository<User> {
         throw new PasswordNotContainSpecialError();
       return true;
     } catch (error) {
-      throw error;
+      return error?.type && error?.type === 'Password'
+        ? error
+        : { name: error.name, message: error.message, stack: error?.stack };
     }
   }
 
-  async validateUser({ email, password, role }: CreateAccountInput) {
+  async validateUser({
+    email,
+    password,
+  }: CreateAccountInput): Promise<boolean | CreateAccountErrors>;
+  async validateUser(
+    { email, password }: EditProfileInput,
+    user: User,
+  ): Promise<boolean | EditProfileErrors>;
+  async validateUser(
+    validateInput: CreateAccountInput | EditProfileInput,
+    user?: User,
+  ): Promise<boolean | CreateAccountErrors | EditProfileErrors> {
     try {
-      const errors: CreateAccountErrors = {};
+      type ValidateResultType = boolean | CoreError | undefined;
 
-      if (!role) errors.role = new RequiredUserFieldError(['role']);
+      let [validateEmailResult, validatePasswordResult] =
+        Array.from<ValidateResultType>({ length: 2 });
+      let errors: CreateAccountErrors | EditProfileErrors = {};
 
-      // email 검사
-      await this.validateEmail(email).catch(error => {
-        error?.type === 'Email'
-          ? (errors.email = error)
-          : (errors.systemErrors = [
-              ...errors.systemErrors,
-              {
-                name: error?.name,
-                message: error?.message,
-                stack: error?.stack,
-              },
-            ]);
-      });
+      if (
+        isOfType<CreateAccountInput>(validateInput, CREATE_ACCOUNT_INPUT_KEYS)
+      ) {
+        // validate createAccount user
+        const { email, password, role } = validateInput;
+        console.log('validateUserInput: ', { email, password, role });
 
-      // password 검사
-      await this.validatePassword(password).catch(error => {
-        error?.type === 'Password'
-          ? (errors.password = error)
-          : (errors.systemErrors = [
-              ...errors.systemErrors,
-              {
-                name: error?.name,
-                message: error?.message,
-                stack: error?.stack,
-              },
-            ]);
-      });
+        validateEmailResult = await this.validateEmail(email);
+        validatePasswordResult = await this.validatePassword(password);
+      } else {
+        // validate editProfile user
+        const { email, password } = validateInput;
+        console.log('validateUserInput: ', { email, password });
+
+        if (email) validateEmailResult = await this.validateEmail(email, user);
+        if (password)
+          validatePasswordResult = await this.validatePassword(password, user);
+      }
+
+      errors = {
+        ...errors,
+        ...(validateEmailResult !== true && {
+          email: validateEmailResult as CoreError,
+        }),
+        ...(validatePasswordResult !== true && {
+          password: validatePasswordResult as CoreError,
+        }),
+      };
+
+      console.log('validateUserErrors: ', errors);
 
       return Object.keys(errors).length === 0 ? true : errors;
     } catch (error) {
       return {
-        name: error?.name,
-        message: error?.message,
-        stack: error?.stack,
+        systemErrors: [
+          {
+            name: error.name,
+            message: error.message,
+            stack: error?.stack,
+          },
+        ],
       };
     }
   }

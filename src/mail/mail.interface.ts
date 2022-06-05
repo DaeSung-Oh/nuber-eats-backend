@@ -2,24 +2,29 @@ import { gmail_v1 } from 'googleapis';
 import { OAuth2Client } from 'google-auth-library';
 
 export interface MailModuleOptions {
-  apiKey: string;
-  oAuthUser: string;
-  refreshToken: string;
+  oAuthUserEmail: string;
   gmailClientID: string;
   gmailSecretKey: string;
 }
 
-export interface MailVars {
-  transporter: any;
+export interface MailConfig {
   oAuth2Client: OAuth2Client;
   gmail: gmail_v1.Gmail;
+  transporter: any;
 }
 
-export interface EmailVar {
-  key: string;
-  value: string;
+export type EmailTemplateVarsType = WelcomeEmailVar | VerfificationEmailVar;
+export interface WelcomeEmailVar {
+  userEmail: string;
+}
+export interface VerfificationEmailVar {
+  userEmail: string;
+  code: string;
 }
 
-export type ToLimitType = 'ods1988@naver.com' | 'dsnaver88@gmail.com';
-
-export type EmailTemplate = 'verifyEmail' | 'welcome';
+export interface MessageConfig {
+  from: string;
+  to: string;
+  subject: string;
+  html: string;
+}

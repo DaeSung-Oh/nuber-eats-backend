@@ -1,5 +1,6 @@
-import { ArgsType, Field, ObjectType } from '@nestjs/graphql';
+import { ArgsType, Field, ObjectType, OmitType } from '@nestjs/graphql';
 import { CoreOutput } from 'src/common/dtos/output.dto';
+import { CoreError } from 'src/errors';
 import { User } from '../entities/user.entity';
 
 @ArgsType()
@@ -9,7 +10,9 @@ export class UserProfileInput {
 }
 
 @ObjectType()
-export class UserProfileOutput extends CoreOutput {
+export class UserProfileOutput extends OmitType(CoreOutput, ['error']) {
+  @Field(type => CoreError, { nullable: true })
+  error?: CoreError;
   @Field(type => User, { nullable: true })
   user?: User;
 }

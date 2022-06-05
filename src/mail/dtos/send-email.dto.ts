@@ -1,23 +1,39 @@
-import { Field, InputType, ObjectType } from '@nestjs/graphql';
+import {
+  Field,
+  InputType,
+  ObjectType,
+  OmitType,
+  registerEnumType,
+} from '@nestjs/graphql';
 import { CoreOutput } from 'src/common/dtos/output.dto';
-import { EmailTemplate, EmailVar } from '../mail.interface';
+import { CoreError } from 'src/errors';
+
+export enum EmailTemplateName {
+  WelcomeEmail = 'welcomeEmail',
+  VerificationEmail = 'verificationEmail',
+}
+
+registerEnumType(EmailTemplateName, { name: 'EmailTemplateName' });
 
 @InputType()
-export class EmailVarField {
+@ObjectType()
+export class EmailVarFields {
   @Field(type => String)
-  key: string;
-  @Field(type => String)
-  value: string;
+  userEmail: string;
+  @Field(type => String, { nullable: true })
+  code?: string;
 }
 
 @InputType()
 export class SendEmailInput {
   @Field(type => String)
   to: string;
-  @Field(type => String, { defaultValue: 'verifyEmail' })
-  templateName: EmailTemplate;
-  @Field(type => [EmailVarField])
-  emailVars: EmailVar[];
+  @Field(type => EmailTemplateName, {
+    defaultValue: EmailTemplateName.VerificationEmail,
+  })
+  templateName: EmailTemplateName;
+  @Field(type => EmailVarFields)
+  emailVars: EmailVarFields;
 }
 
 @InputType()
@@ -29,4 +45,10 @@ export class SendVerificationEmailInput {
 }
 
 @ObjectType()
-export class SendEmailOutput extends CoreOutput {}
+export class SendEmailOutput extends OmitType(CoreOutput, ['error']) {
+  @Field(type => CoreError, { nullable: true })
+  error?: CoreError;
+
+  @Field(type => String, { nullable: true })
+  res_string?: string;
+}

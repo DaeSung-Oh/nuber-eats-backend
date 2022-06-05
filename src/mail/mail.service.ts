@@ -4,26 +4,40 @@ import * as cheerio from 'cheerio';
 import { Inject, Injectable } from '@nestjs/common';
 import { CONFIG_OPTIONS } from 'src/common/common.constants';
 import {
-  EmailTemplate,
-  EmailVar,
   MailModuleOptions,
-  MailVars,
+  MailConfig,
+  WelcomeEmailVar,
+  VerfificationEmailVar,
+  EmailTemplateVarsType,
+  MessageConfig,
 } from './mail.interface';
-import { SendEmailOutput } from './dtos/send-email.dto';
-import { VARS } from './mail.constants';
+import { EmailTemplateName, SendEmailOutput } from './dtos/send-email.dto';
+import {
+  MAIL_CONFIG,
+  VERIFICATION_EMAIL_SUBJECT,
+  WELCOME_EMAIL_SUBJECT,
+} from './mail.constants';
+import {
+  asObjectType,
+  base64Encoding,
+  translateKr,
+} from 'src/common/core.util';
+
+// eslint-disable-next-line
+const chalk = require('chalk');
 
 @Injectable()
 export class MailService {
   constructor(
     @Inject(CONFIG_OPTIONS) private readonly options: MailModuleOptions,
-    @Inject(VARS) private readonly vars: MailVars,
+    @Inject(MAIL_CONFIG) private readonly mailConfig: MailConfig,
   ) {}
 
-  /**@description read emailTemplateHTML, return message object */
+  /**@description read emailTemplateHTML, return parsed html to string */
   async createEmailTemplate(
-    templateName: EmailTemplate,
-    emailVars?: EmailVar[],
-  ) {
+    templateName: EmailTemplateName,
+    emailVars: EmailTemplateVarsType,
+  ): Promise<string> {
     const templatePath = path.join(
       __dirname.replace('\\dist\\mail', ''),
       '/src',
@@ -44,44 +58,35 @@ export class MailService {
       },
     });
 
-    const message = {
-      subject: '',
-      html: undefined,
-    };
+    if (
+      templateName === EmailTemplateName.WelcomeEmail &&
+      asObjectType<WelcomeEmailVar>(emailVars)
+    ) {
+      // sendEmail: createAccount Welcome
+    } else if (
+      templateName === EmailTemplateName.VerificationEmail &&
+      asObjectType<VerfificationEmailVar>(emailVars)
+    ) {
+      // sendEmail: createAccount, editProfile Verfication
+      const { code, userEmail } = emailVars;
 
-    switch (templateName) {
-      case 'welcome':
-        message.subject = '[가입]Welcome!';
-        break;
-      case 'verifyEmail':
-        const emailVarsObj: { code?: string; userName?: string } = {};
-        emailVars.forEach(({ key, value }) => {
-          Object.assign(emailVarsObj, { ...emailVarsObj, [key]: value });
-        });
-        const { code, userName } = emailVarsObj;
-        const titleTag = $('title');
-        titleTag.text(`${userName}`);
-        const verifyLinkTag = $('#verifyLink');
-        verifyLinkTag[0].attribs.href = `http://localhost:3000/${code}`;
+      const titleTag = $('title');
+      titleTag.text(`${userEmail}`);
 
-        message.subject = '[인증]Verify your Email';
-        message.html = $.html();
-
-        break;
-      default:
-        break;
+      const verifyLinkTag = $('#verifyLink');
+      verifyLinkTag[0].attribs.href = `http://localhost:3000/${code}`;
     }
 
-    return message;
+    return $.html();
   }
 
   async sendEmail(
     to: string,
-    templateName: EmailTemplate = 'verifyEmail',
-    emailVars: EmailVar[],
+    templateName: EmailTemplateName = EmailTemplateName.VerificationEmail,
+    emailVars: EmailTemplateVarsType,
   ): Promise<SendEmailOutput> {
-    // simple Test (Verification Email)
     try {
+      // limit send to email
       switch (to) {
         case 'ods1988@naver.com':
           break;
@@ -91,70 +96,61 @@ export class MailService {
           throw '허용된 이메일이 아닙니다.';
       }
 
-      const { subject, html } = await this.createEmailTemplate(
-        templateName,
-        emailVars,
-      );
-
-      const message = {
-        from: this.options.oAuthUser,
+      const html = await this.createEmailTemplate(templateName, emailVars);
+      const subject =
+        templateName === EmailTemplateName.WelcomeEmail
+          ? WELCOME_EMAIL_SUBJECT(to)
+          : VERIFICATION_EMAIL_SUBJECT(to);
+      const message: MessageConfig = {
+        from: this.options.oAuthUserEmail,
         to,
         subject,
         html,
       };
 
-      const result = await this.vars.transporter.sendMail(message);
-      console.log('메일발송결과', result);
-      return { ok: true };
+      const result = await this.mailConfig.transporter.sendMail(message);
+
+      return { ok: true, res_string: JSON.stringify(result, null, 2) };
     } catch (error) {
-      return { ok: false, error };
+      throw error;
     }
-    // try {
-    //   const message = {
-    //     from: this.options.oAuthUser,
-    //     to,
-    //     ...(await this.createEmailTemplate(templateName, emailVars)),
-    //   };
-    //   await this.transporter.sendMail(message);
-    //   console.log('메일발송 성공');
-    //   return { ok: true };
-    // } catch (e) {
-    //   console.log(e);
-    //   return { ok: false, error: e };
-    // }
   }
 
-  async sendVerificationEmail(email: string, code: string) {
-    return this.sendEmail(email, 'verifyEmail', [
-      { key: 'code', value: code },
-      { key: 'userName', value: email },
-    ]);
+  async sendWelcomEmail(email: string): Promise<SendEmailOutput> {
+    try {
+      return this.sendEmail(email, EmailTemplateName.WelcomeEmail, {
+        userEmail: email,
+      });
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  async sendVerificationEmail(
+    email: string,
+    code: string,
+  ): Promise<SendEmailOutput> {
+    try {
+      return this.sendEmail(email, EmailTemplateName.VerificationEmail, {
+        userEmail: email,
+        code,
+      });
+    } catch (error) {
+      throw error;
+    }
   }
 
   async sendByGmail(
     to: string,
-    templateName: EmailTemplate = 'verifyEmail',
-    emailVars: EmailVar[],
+    templateName: EmailTemplateName = EmailTemplateName.VerificationEmail,
+    emailVars: EmailTemplateVarsType,
   ): Promise<SendEmailOutput> {
-    const base64Encoding = (message: string) => {
-      const encodingResult = Buffer.from(message)
-        .toString('base64')
-        .replace(/\+/g, '-')
-        .replace(/\//g, '_');
-      return encodingResult;
-    };
-
-    const translateKr = (message: string) => {
-      return `=?UTF-8?B?${Buffer.from(message).toString('base64')}?=`;
-    };
-
-    // simple test
     try {
-      const { subject, html } = await this.createEmailTemplate(
-        templateName,
-        emailVars,
-      );
-
+      const html = await this.createEmailTemplate(templateName, emailVars);
+      const subject =
+        templateName === EmailTemplateName.WelcomeEmail
+          ? WELCOME_EMAIL_SUBJECT(to)
+          : VERIFICATION_EMAIL_SUBJECT(to);
       const message =
         `To: ${to}\n` +
         `Subject: ${translateKr(subject)}\n` +
@@ -164,26 +160,26 @@ export class MailService {
         `\n` +
         `${html}\n`;
 
-      const res = await this.vars.gmail.users.messages.send({
+      const res = await this.mailConfig.gmail.users.messages.send({
         userId: 'me',
         requestBody: {
           raw: base64Encoding(message),
         },
       });
-      console.log(res);
+
       return {
         ok: true,
+        res_string: JSON.stringify(res, null, 2),
       };
-    } catch (e) {
-      console.log(e);
-      return { ok: false, error: e };
+    } catch (error) {
+      throw error;
     }
   }
 
   async sendVerificationEmailByGmail(email: string, code: string) {
-    return this.sendByGmail(email, 'verifyEmail', [
-      { key: 'code', value: code },
-      { key: 'userName', value: email },
-    ]);
+    return this.sendByGmail(email, EmailTemplateName.VerificationEmail, {
+      userEmail: email,
+      code,
+    });
   }
 }

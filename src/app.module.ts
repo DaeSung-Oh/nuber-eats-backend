@@ -27,7 +27,7 @@ import { OrderMenu } from './orders/entities/orderMenu.entity';
 import { OrderMenuRepository } from './orders/repositories/orderMenuRepository';
 import { RestaurantRepository } from './restaurants/repositories/restaurantRepository';
 import { MenuRepository } from './restaurants/repositories/menuRepository';
-import { Context } from 'apollo-server-core';
+import { GoogleOAuth2Token } from './auth/entities/googleOAuth2Token.entity';
 
 @Module({
   imports: [
@@ -44,11 +44,10 @@ import { Context } from 'apollo-server-core';
         DB_NAME: Joi.string().required(),
         TOKEN_KEY: Joi.string().required(),
         TOKEN_SECRET_KEY: Joi.string().required(),
-        GMAIL_API_KEY: Joi.string().required(),
-        GMAIL_OAUTH_USER: Joi.string().required(),
+        GMAIL_OAUTH_USER_EMAIL: Joi.string().required(),
         GMAIL_CLIENT_ID: Joi.string().required(),
         GMAIL_CLIENT_SECRET_KEY: Joi.string().required(),
-        GMAIL_OAUTH_REFRESH_TOKEN: Joi.string().required(),
+        AUTH_CODE: Joi.string().required(),
       }),
     }),
     TypeOrmModule.forRoot({
@@ -75,6 +74,7 @@ import { Context } from 'apollo-server-core';
         Order,
         OrderMenu,
         OrderMenuRepository,
+        GoogleOAuth2Token,
       ],
     }),
     GraphQLModule.forRoot<ApolloDriverConfig>({
@@ -101,10 +101,8 @@ import { Context } from 'apollo-server-core';
     JwtModule.forRoot({
       privateKey: process.env.TOKEN_SECRET_KEY,
     }),
-    MailModule.forRoot({
-      apiKey: process.env.GMAIL_API_KEY,
-      oAuthUser: process.env.GMAIL_OAUTH_USER,
-      refreshToken: process.env.GMAIL_OAUTH_REFRESH_TOKEN,
+    MailModule.forRootAsync({
+      oAuthUserEmail: process.env.GMAIL_OAUTH_USER_EMAIL,
       gmailClientID: process.env.GMAIL_CLIENT_ID,
       gmailSecretKey: process.env.GMAIL_CLIENT_SECRET_KEY,
     }),

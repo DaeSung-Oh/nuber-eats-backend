@@ -2,7 +2,6 @@ import {
   Field,
   InputType,
   ObjectType,
-  PartialType,
   registerEnumType,
 } from '@nestjs/graphql';
 import { CoreEntity } from 'src/common/entities/core.entity';
@@ -11,15 +10,13 @@ import {
   BeforeUpdate,
   Column,
   Entity,
-  getRepository,
   OneToMany,
   ChildEntity,
   TableInheritance,
-  AfterInsert,
 } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { InternalServerErrorException, Param } from '@nestjs/common';
-import { IsBoolean, IsEmail, IsEnum, IsString } from 'class-validator';
+import { IsBoolean, IsEnum, IsString } from 'class-validator';
 import { Restaurant } from 'src/restaurants/entities/restaurant.entity';
 import { Order } from 'src/orders/entities/order.entity';
 
